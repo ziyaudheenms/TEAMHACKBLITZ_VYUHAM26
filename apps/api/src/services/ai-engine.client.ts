@@ -136,6 +136,24 @@ export class AIEngineClient {
 
     return res.body;
   }
+
+  async respondFromOrb(payload: Pick<AIRunPayload, "prompt" | "userId" | "organisationId" | "conversationId" | "authToken">): Promise<AIRunResponse> {
+    const res = await fetch(`${this.baseUrl}/api/v1/orb/respond`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(payload.authToken ? { Authorization: `Bearer ${payload.authToken}` } : {}),
+      },
+      body: JSON.stringify({
+        prompt: payload.prompt,
+        user_id: payload.userId,
+        organisation_id: payload.organisationId,
+        conversation_id: payload.conversationId,
+      }),
+    });
+    if (!res.ok) throw new Error(`AI Engine error (${res.status}): ${await res.text()}`);
+    return (await res.json()) as AIRunResponse;
+  }
 }
 
 export const aiEngineClient = new AIEngineClient();

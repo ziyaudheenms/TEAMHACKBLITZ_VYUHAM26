@@ -26,6 +26,14 @@ class AgentRunRequest(BaseModel):
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Custom metadata for context")
 
 
+class LiveOrbRequest(BaseModel):
+    """A lightweight, click-triggered request from the floating assistant orb."""
+    prompt: str = Field("Give a brief, helpful greeting and ask how you can help.")
+    user_id: str
+    organisation_id: str
+    conversation_id: Optional[str] = None
+
+
 class AgentRunResponse(BaseModel):
     """Complete response returned to the Backend."""
     response: str

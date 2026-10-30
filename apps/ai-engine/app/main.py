@@ -80,6 +80,7 @@ async def root() -> Dict[str, Any]:
         "endpoints": {
             "agent_run": "/api/v1/agent/run",
             "agent_stream": "/api/v1/agent/stream",
+            "orb_respond": "/api/v1/orb/respond",
             "agent_tools": "/api/v1/agent/tools",
             "health": "/api/v1/health",
         },

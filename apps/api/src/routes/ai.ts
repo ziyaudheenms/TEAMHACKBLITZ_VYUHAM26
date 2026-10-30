@@ -6,6 +6,51 @@ import { getFullAuthContext, requireRole, writeAuditLog, type FullAuthContext, t
 
 export const aiRouter = new Hono();
 
+// The browser receives only this short-lived URL; the ElevenLabs API key remains
+// on the API server. Gemini requests still use POST /ai/live-orb below.
+aiRouter.get("/live-orb/signed-url", async (c) => {
+  const agentId = process.env.ELEVENLABS_AGENT_ID;
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!agentId || !apiKey) return c.json({ error: "Voice assistant is not configured." }, 503);
+  try {
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`,
+      { headers: { "xi-api-key": apiKey } }
+    );
+    if (!response.ok) {
+      console.error("[AI /live-orb/signed-url]", response.status, await response.text());
+      return c.json({ error: "Could not start the voice assistant." }, 502);
+    }
+    const body = (await response.json()) as { signed_url?: string };
+    return body.signed_url ? c.json({ signedUrl: body.signed_url }) : c.json({ error: "Voice provider returned no signed URL." }, 502);
+  } catch (error: any) {
+    console.error("[AI /live-orb/signed-url]", error?.message);
+    return c.json({ error: "Could not reach the voice provider." }, 502);
+  }
+});
+
+// ─── POST /api/v1/ai/live-orb ───────────────────────────────────────────────
+// A small, dedicated path for the floating orb. It forwards only to the AI
+// Engine, where GEMINI_API_KEY is configured; the browser never receives it.
+aiRouter.post("/live-orb", async (c) => {
+  const body = await c.req.json().catch(() => ({} as { prompt?: string; conversationId?: string }));
+  const authHeader = c.req.header("Authorization");
+  const token = authHeader?.replace(/^Bearer\s+/i, "");
+  try {
+    const result = await aiEngineClient.respondFromOrb({
+      prompt: body.prompt?.trim() || "Give a brief, helpful greeting and ask how you can help.",
+      conversationId: body.conversationId,
+      userId: c.req.header("X-User-Id") || "anonymous-user",
+      organisationId: c.req.header("X-Organisation-Id") || "default-org",
+      authToken: token,
+    });
+    return c.json(result);
+  } catch (error: any) {
+    console.error("[AI /live-orb]", error?.message);
+    return c.json({ error: error.message || "Failed to get orb response" }, 500);
+  }
+});
+
 const querySchema = z.object({
   prompt: z.string().min(1).max(8000),
   conversationId: z.string().optional(),

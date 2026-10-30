@@ -9,12 +9,13 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@bizcontext/types": "workspace:*",
+    "@bizcontext/ui": "workspace:*",
+    "@elevenlabs/react": "^1.20.2",
+    "lucide-react": "^0.474.0",
     "next": "^14.2.23",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "lucide-react": "^0.474.0",
-    "@bizcontext/types": "workspace:*",
-    "@bizcontext/ui": "workspace:*"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

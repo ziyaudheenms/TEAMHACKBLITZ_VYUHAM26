@@ -12,6 +12,7 @@ from app.api.schemas import (
     AgentRunRequest,
     AgentRunResponse,
     HealthResponse,
+    LiveOrbRequest,
     ToolInfo,
     ToolsListResponse,
 )
@@ -146,6 +147,38 @@ async def stream_council_route(
 async def council_info():
     """Describes the council roster."""
     return {"agents": council_roster(), "parallel": ["knowledge", "researcher", "browser"], "final": "ceo"}
+
+
+@router.post("/orb/respond", response_model=AgentRunResponse)
+async def respond_from_orb(
+    payload: LiveOrbRequest,
+    authorization: Optional[str] = Header(None),
+) -> AgentRunResponse:
+    """Produces the orb's concise Gemini response without exposing its API key."""
+    context = HarnessContext(
+        user_id=payload.user_id,
+        organisation_id=payload.organisation_id,
+        conversation_id=payload.conversation_id or str(uuid.uuid4()),
+        auth_token=_extract_bearer_token(authorization),
+        agent_role="general_assistant",
+    )
+    result = await run_harness(
+        prompt=payload.prompt,
+        context=context,
+        custom_system_prompt=(
+            "You are BizContext's floating assistant. Respond in one or two concise, "
+            "friendly sentences suitable for the small orb popover."
+        ),
+    )
+    return AgentRunResponse(
+        response=result.response,
+        citations=result.citations,
+        tool_calls=result.tool_calls,
+        conversation_id=result.conversation_id,
+        agent_id=result.agent_id,
+        usage=result.usage,
+        created_at=result.created_at,
+    )
 
 
 @router.get("/agent/tools", response_model=ToolsListResponse)

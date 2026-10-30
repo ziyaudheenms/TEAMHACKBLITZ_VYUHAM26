@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AppShell } from "../components/layout/AppShell";
+import { LiveOrb } from "@/components/ui/live-orb";
 
 export const metadata: Metadata = {
   title: "BizContext AI | Minto Autonomous Operating Workspace",
@@ -17,6 +18,7 @@ export default function RootLayout({
     <html lang="en" className="light">
       <body className="antialiased min-h-screen bg-[#F8F9FA] text-[#262626] selection:bg-[#9DFF9B] selection:text-[#262626]">
         <AppShell>{children}</AppShell>
+        <LiveOrb />
       </body>
     </html>
   );
