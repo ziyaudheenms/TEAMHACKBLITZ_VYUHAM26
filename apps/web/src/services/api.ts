@@ -39,6 +39,28 @@ import {
 import { http, ApiError, sessionStore, toStoredSession } from "./http";
 import type { AuthResponse, StoredSession } from "./http";
 
+export interface AdminUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  createdAt: string;
+  lastSignInAt: string | null;
+  isSuperAdmin: boolean;
+  blocked: boolean;
+  blockReason: string | null;
+  blockedAt: string | null;
+  memberships: Array<{ organisationId: string; organisationName: string; role: string }>;
+}
+
+export interface AdminOrganisation {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: string;
+  memberCount: number;
+}
+
 export interface ApiStatus {
   isLive: boolean;
   endpoint: string;
@@ -198,12 +220,19 @@ class ApiService {
   private async request<T>(path: string, options?: RequestInit): Promise<T | null> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2500);
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const session = sessionStore.get();
+      const authHeaders: Record<string, string> = {};
+      if (session) {
+        authHeaders["Authorization"] = `Bearer ${session.accessToken}`;
+        if (session.organisationId) authHeaders["X-Organisation-Id"] = session.organisationId;
+        if (session.user?.id) authHeaders["X-User-Id"] = session.user.id;
+      }
       const res = await fetch(`${this.baseUrl}${path}`, {
         ...options,
         headers: {
           "Content-Type": "application/json",
-          ...(sessionStore.get() ? { Authorization: `Bearer ${sessionStore.get()!.accessToken}` } : {}),
+          ...authHeaders,
           ...options?.headers,
         },
         signal: controller.signal,
@@ -215,6 +244,8 @@ class ApiService {
         this.notifyStatus();
         return (await res.json()) as T;
       }
+      // Surface 4xx/5xx details without crashing
+      console.warn(`[api] ${options?.method ?? "GET"} ${path} → ${res.status}`);
     } catch {
       // Backend not running yet or endpoint 404/500
       this.isLiveApi = false;
@@ -261,11 +292,11 @@ class ApiService {
     let session = toStoredSession(res);
     sessionStore.set(session, remember);
     try {
-      const me = await http<{ organisationId: string | null; role: string | null }>(
+      const me = await http<{ organisationId: string | null; role: string | null; isSuperAdmin?: boolean }>(
         this.baseUrl,
         "/auth/me"
       );
-      session = { ...session, organisationId: me.organisationId, role: me.role };
+      session = { ...session, organisationId: me.organisationId, role: me.role, isSuperAdmin: me.isSuperAdmin === true };
       if (!session.organisationId) {
         const orgs = await this.getOrganisations();
         session.organisationId = orgs[0]?.id ?? null;
@@ -298,8 +329,64 @@ class ApiService {
 
   // --- Organisations & Departments ---
   public async getOrganisations(): Promise<Organisation[]> {
-    const res = await http<{ organisations: Organisation[] }>(this.baseUrl, "/organisations");
+    try {
+      const res = await http<{ organisations: Organisation[] }>(this.baseUrl, "/organisations");
+      const orgs = res?.organisations ?? [];
+      if (orgs.length > 0) {
+        this.organisations = orgs;
+        this.saveStore("organisations", orgs);
+        this.isLiveApi = true;
+        this.notifyStatus();
+      }
+      return orgs.length > 0 ? orgs : this.organisations;
+    } catch {
+      return this.organisations;
+    }
+  }
+
+  // --- Super admin console ---
+  public async adminListUsers(search = ""): Promise<AdminUser[]> {
+    const res = await http<{ users: AdminUser[] }>(this.baseUrl, `/admin/users?search=${encodeURIComponent(search)}`);
+    return res.users;
+  }
+
+  public async adminCreateUser(input: {
+    email: string;
+    password: string;
+    firstName: string;
+    lastName?: string;
+    organisationId?: string;
+    role?: string;
+    designation?: string;
+  }): Promise<{ id: string; email: string; warnings: string[] }> {
+    return http(this.baseUrl, "/admin/users", { method: "POST", body: JSON.stringify(input) });
+  }
+
+  public async adminSetBlocked(userId: string, blocked: boolean, reason?: string): Promise<void> {
+    await http(this.baseUrl, `/admin/users/${userId}/${blocked ? "block" : "unblock"}`, {
+      method: "POST",
+      body: JSON.stringify(blocked ? { reason } : {}),
+    });
+  }
+
+  public async adminListOrganisations(): Promise<AdminOrganisation[]> {
+    const res = await http<{ organisations: AdminOrganisation[] }>(this.baseUrl, "/admin/organisations");
     return res.organisations;
+  }
+
+  public async adminCreateOrganisation(input: { name: string; slug?: string; ownerUserId?: string }): Promise<AdminOrganisation> {
+    return http(this.baseUrl, "/admin/organisations", { method: "POST", body: JSON.stringify(input) });
+  }
+
+  public async adminSetMemberRole(orgId: string, userId: string, role: string): Promise<void> {
+    await http(this.baseUrl, `/admin/organisations/${orgId}/members/${userId}`, {
+      method: "PUT",
+      body: JSON.stringify({ role }),
+    });
+  }
+
+  public async adminRemoveMember(orgId: string, userId: string): Promise<void> {
+    await http(this.baseUrl, `/admin/organisations/${orgId}/members/${userId}`, { method: "DELETE" });
   }
 
   public async getDepartments(): Promise<Department[]> {
@@ -324,15 +411,21 @@ class ApiService {
   }
 
   public async createOrganisation(name: string, slug: string): Promise<Organisation> {
-    const org = await http<Organisation>(this.baseUrl, "/organisations", {
+    // The backend auto-enrolls creator as 'owner' and returns { ...org, role: 'owner' }
+    const orgRes = await http<Organisation & { role?: string }>(this.baseUrl, "/organisations", {
       method: "POST",
       body: JSON.stringify({ name, slug }),
     });
     const session = sessionStore.get();
-    if (session && !session.organisationId) {
-      sessionStore.set({ ...session, organisationId: org.id });
+    if (session) {
+      const updated = {
+        ...session,
+        organisationId: session.organisationId ?? orgRes.id,
+        role: session.role ?? orgRes.role ?? "owner",
+      };
+      sessionStore.set(updated);
     }
-    return org;
+    return orgRes;
   }
 
   // --- Employees ---
@@ -921,24 +1014,37 @@ class ApiService {
   // --- Agents & Browser Jobs (Section 4 & 5) ---
   public async getAgents(): Promise<AgentRecord[]> {
     const live = await this.request<AgentRecord[]>("/agents");
-    return live || this.agents;
+    if (live) {
+      this.agents = live;
+      this.saveStore("agents", live);
+    }
+    return live ?? this.agents;
   }
 
   public async createAgent(data: Partial<AgentRecord>): Promise<AgentRecord> {
-    const newAgent: AgentRecord = {
+    const payload = {
+      name: data.name || "Custom Assistant",
+      role: data.role || "",
+      description: data.description || "",
+      instructions: data.instructions || "Follow least-privilege security guidelines.",
+      model: data.model || "gemini-2.5-flash",
+      browserPermission: data.browserPermission || "B1",
+      allowedDomains: data.allowedDomains || [],
+    };
+
+    const live = await this.request<AgentRecord>("/agents", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    const newAgent: AgentRecord = live ?? {
       id: `ag-${Date.now()}`,
-      organisationId: "org-1",
-      createdBy: "emp-1",
+      organisationId: sessionStore.get()?.organisationId ?? "org-1",
+      createdBy: sessionStore.get()?.user?.id ?? "emp-1",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      name: data.name || "Custom Assistant",
-      role: data.role || "Specialized Task Agent",
-      description: data.description || "Created to execute organizational automations.",
-      instructions: data.instructions || "Follow least-privilege security guidelines.",
-      model: data.model || "claude-3-5-sonnet",
-      browserPermission: data.browserPermission || "B1",
-      status: "active",
-      allowedDomains: data.allowedDomains || ["internal.docs"],
+      ...payload,
+      status: "draft",
       totalExecutions: 0,
       successRate: 100,
     };
@@ -949,76 +1055,95 @@ class ApiService {
     return newAgent;
   }
 
+  public async updateAgentStatus(agentId: string, status: AgentRecord["status"]): Promise<AgentRecord | null> {
+    const live = await this.request<AgentRecord>(`/agents/${agentId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
+    if (live) {
+      const idx = this.agents.findIndex((a) => a.id === agentId);
+      if (idx !== -1) {
+        this.agents[idx] = live;
+        this.saveStore("agents", this.agents);
+      }
+    }
+    return live;
+  }
+
   public async getBrowserJobs(): Promise<BrowserJob[]> {
     const live = await this.request<BrowserJob[]>("/browser-jobs");
-    return live || this.browserJobs;
+    if (live) {
+      this.browserJobs = live;
+      this.saveStore("browserJobs", live);
+    }
+    return live ?? this.browserJobs;
   }
 
   public async createBrowserJob(data: Partial<BrowserJob>): Promise<BrowserJob> {
-    const newJob: BrowserJob = {
-      id: `bjob-${Date.now()}`,
-      organisationId: "org-1",
-      createdBy: "emp-1",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      agentId: data.agentId || "ag-2",
-      agentName: data.agentName || "Autonomous Browser Worker",
+    const payload = {
+      agentId: data.agentId || "",
       goal: data.goal || "Extract web metrics",
       targetUrl: data.targetUrl || "https://example.com",
-      permissionLevel: data.permissionLevel || "B2",
-      status: "running",
-      steps: [
-        {
-          stepNumber: 1,
-          action: "navigate",
-          target: data.targetUrl || "https://example.com",
-          status: "completed",
-          timestamp: new Date().toLocaleTimeString(),
-          details: `Connected to sandbox network namespace and resolved ${data.targetUrl}`,
-        },
-        {
-          stepNumber: 2,
-          action: "extract",
-          target: "body",
-          status: "running",
-          timestamp: new Date().toLocaleTimeString(),
-          details: "Parsing DOM nodes...",
-        },
-      ],
-      evidenceUrls: ["https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=600&auto=format&fit=crop&q=80"],
-      outputSummary: "Job initiated in sandboxed container.",
+      permissionLevel: data.permissionLevel || "B1",
     };
 
     const live = await this.request<BrowserJob>("/browser-jobs", {
       method: "POST",
-      body: JSON.stringify(newJob),
+      body: JSON.stringify(payload),
     });
 
-    const res = live || newJob;
+    const fallback: BrowserJob = {
+      id: `bjob-${Date.now()}`,
+      organisationId: sessionStore.get()?.organisationId ?? "org-1",
+      createdBy: sessionStore.get()?.user?.id ?? "emp-1",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      agentId: data.agentId || "ag-2",
+      agentName: data.agentName || "Browser Worker",
+      goal: data.goal || "Extract web metrics",
+      targetUrl: data.targetUrl || "https://example.com",
+      permissionLevel: data.permissionLevel || "B1",
+      status: "queued",
+      steps: [],
+      evidenceUrls: [],
+      outputSummary: "Job queued.",
+    };
+
+    const res = live || fallback;
     this.browserJobs = [res, ...this.browserJobs];
     this.saveStore("browserJobs", this.browserJobs);
-    this.addAuditLog("Autonomous Browser Worker", "agent", `Launched browser job: "${res.goal}"`);
+    this.addAuditLog(this.actorName(), "user", `Launched browser job: "${res.goal}"`);
     return res;
   }
 
-  public async approveBrowserJob(jobId: string, decision: "approved" | "rejected"): Promise<BrowserJob> {
+  public async approveBrowserJob(jobId: string, decision: "approved" | "rejected", note?: string): Promise<BrowserJob> {
+    // Live API (requires admin). A real server rejection (403/404/...) must surface to the
+    // caller; only a network failure (status 0) may fall back to the offline demo path.
+    try {
+      const live = await http<BrowserJob>(this.baseUrl, `/browser-jobs/${jobId}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ approved: decision === "approved", note }),
+      });
+      const liveIdx = this.browserJobs.findIndex((j) => j.id === jobId);
+      if (liveIdx !== -1) this.browserJobs[liveIdx] = live;
+      else this.browserJobs.unshift(live);
+      this.saveStore("browserJobs", this.browserJobs);
+      return live;
+    } catch (err) {
+      if (!(err instanceof ApiError) || err.status !== 0) throw err;
+    }
+
+    // Offline fallback
     const idx = this.browserJobs.findIndex((j) => j.id === jobId);
     if (idx !== -1) {
       if (decision === "approved") {
         this.browserJobs[idx].status = "completed";
-        this.browserJobs[idx].steps.push({
-          stepNumber: this.browserJobs[idx].steps.length + 1,
-          action: "click",
-          status: "completed",
-          timestamp: new Date().toLocaleTimeString(),
-          details: "Supervisor approval granted. Downloaded PDF invoice securely to storage/org-1.",
-        });
-        this.browserJobs[idx].outputSummary = "Approved by supervisor. Action completed successfully with full cryptographic audit trail.";
-        this.addAuditLog(this.actorName(), "user", `APPROVED high-risk browser action for job #${jobId}`);
+        this.browserJobs[idx].outputSummary = "Approved by supervisor.";
+        this.addAuditLog(this.actorName(), "user", `APPROVED browser job #${jobId}`);
       } else {
         this.browserJobs[idx].status = "cancelled";
-        this.browserJobs[idx].outputSummary = "Job rejected by supervisor.";
-        this.addAuditLog(this.actorName(), "user", `REJECTED browser action for job #${jobId}`);
+        this.browserJobs[idx].outputSummary = "Rejected by supervisor.";
+        this.addAuditLog(this.actorName(), "user", `REJECTED browser job #${jobId}`);
       }
       this.saveStore("browserJobs", this.browserJobs);
       return this.browserJobs[idx];

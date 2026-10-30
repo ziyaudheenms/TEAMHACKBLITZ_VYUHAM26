@@ -1,447 +1,280 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { aiEngineClient } from "../services/ai-engine.client";
+import { getSupabaseServiceClient } from "../lib/supabase";
+import { getFullAuthContext, requireRole } from "../lib/auth";
 
 export const searchRoutes = new Hono();
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
 interface SearchResult {
   id: string;
-  type: string;
+  type: "employee" | "knowledge" | "project" | "ticket" | "meeting" | "file";
   title: string;
   subtitle?: string;
+  snippet?: string;
   url: string;
-  matchScore?: number;
   createdAt?: string;
 }
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
+const VALID_SCOPES = ["all", "employees", "knowledge", "projects", "tickets", "meetings", "files"] as const;
+type Scope = (typeof VALID_SCOPES)[number];
 
-const mockEmployees: SearchResult[] = [
-  {
-    id: "emp-1",
-    type: "employee",
-    title: "Priya Sharma",
-    subtitle: "AI Research Lead",
-    url: "/directory",
-    matchScore: 0.95,
-    createdAt: "2026-10-01T10:00:00Z",
-  },
-  {
-    id: "emp-2",
-    type: "employee",
-    title: "Elena Rostova",
-    subtitle: "Senior Backend Engineer",
-    url: "/directory",
-    matchScore: 0.92,
-    createdAt: "2026-10-02T09:30:00Z",
-  },
-  {
-    id: "emp-3",
-    type: "employee",
-    title: "Marcus Vance",
-    subtitle: "DevOps & Infrastructure Lead",
-    url: "/directory",
-    matchScore: 0.88,
-    createdAt: "2026-10-03T08:00:00Z",
-  },
-  {
-    id: "emp-4",
-    type: "employee",
-    title: "Adhwaithas Sundar",
-    subtitle: "Full-Stack Engineer",
-    url: "/directory",
-    matchScore: 0.85,
-    createdAt: "2026-10-04T11:00:00Z",
-  },
-  {
-    id: "emp-5",
-    type: "employee",
-    title: "Layla Hassan",
-    subtitle: "Product Manager",
-    url: "/directory",
-    matchScore: 0.82,
-    createdAt: "2026-10-05T10:00:00Z",
-  },
-];
-
-const mockKnowledge: SearchResult[] = [
-  {
-    id: "page-1",
-    type: "knowledge",
-    title: "Browser Agent Security Guidelines",
-    subtitle: "Security Policy – B0 to B4 permission levels explained",
-    url: "/knowledge",
-    matchScore: 0.97,
-    createdAt: "2026-09-15T08:00:00Z",
-  },
-  {
-    id: "page-2",
-    type: "knowledge",
-    title: "pgvector & BM25 Hybrid Search Architecture",
-    subtitle: "Technical deep-dive into the AI engine retrieval pipeline",
-    url: "/knowledge",
-    matchScore: 0.93,
-    createdAt: "2026-09-20T09:00:00Z",
-  },
-  {
-    id: "page-3",
-    type: "knowledge",
-    title: "Employee Onboarding Handbook",
-    subtitle: "Step-by-step guide for new hires",
-    url: "/knowledge",
-    matchScore: 0.89,
-    createdAt: "2026-09-10T10:00:00Z",
-  },
-  {
-    id: "page-4",
-    type: "knowledge",
-    title: "API Rate Limiting & Throttling Policy",
-    subtitle: "Internal engineering policy for API consumers",
-    url: "/knowledge",
-    matchScore: 0.84,
-    createdAt: "2026-09-25T11:00:00Z",
-  },
-  {
-    id: "page-5",
-    type: "knowledge",
-    title: "Data Retention & Privacy Standards",
-    subtitle: "Compliance documentation for GDPR and SOC 2",
-    url: "/knowledge",
-    matchScore: 0.80,
-    createdAt: "2026-09-28T12:00:00Z",
-  },
-];
-
-const mockMeetings: SearchResult[] = [
-  {
-    id: "meet-1",
-    type: "meeting",
-    title: "AI Engine Architecture Review",
-    subtitle: "2026-10-15 · 60 min · Priya Sharma, Marcus Vance",
-    url: "/meetings",
-    matchScore: 0.91,
-    createdAt: "2026-10-15T14:00:00Z",
-  },
-  {
-    id: "meet-2",
-    type: "meeting",
-    title: "Q4 OKR Planning Session",
-    subtitle: "2026-10-20 · 90 min · Leadership Team",
-    url: "/meetings",
-    matchScore: 0.87,
-    createdAt: "2026-10-20T10:00:00Z",
-  },
-  {
-    id: "meet-3",
-    type: "meeting",
-    title: "Browser Automation Security Sync",
-    subtitle: "2026-10-22 · 45 min · Marcus Vance, Elena Rostova",
-    url: "/meetings",
-    matchScore: 0.83,
-    createdAt: "2026-10-22T15:00:00Z",
-  },
-  {
-    id: "meet-4",
-    type: "meeting",
-    title: "Frontend Sprint Retrospective",
-    subtitle: "2026-10-25 · 60 min · Engineering Team",
-    url: "/meetings",
-    matchScore: 0.79,
-    createdAt: "2026-10-25T11:00:00Z",
-  },
-  {
-    id: "meet-5",
-    type: "meeting",
-    title: "Investor Demo Dry Run",
-    subtitle: "2026-10-28 · 30 min · All Hands",
-    url: "/meetings",
-    matchScore: 0.76,
-    createdAt: "2026-10-28T09:00:00Z",
-  },
-];
-
-const mockTickets: SearchResult[] = [
-  {
-    id: "tick-1",
-    type: "ticket",
-    title: "CI/CD pipeline fails on Bun 1.1.x upgrade",
-    subtitle: "TICK-1045 · open",
-    url: "/tickets",
-    matchScore: 0.90,
-    createdAt: "2026-10-18T13:00:00Z",
-  },
-  {
-    id: "tick-2",
-    type: "ticket",
-    title: "Supabase RLS policy blocking knowledge page reads",
-    subtitle: "TICK-1046 · in_progress",
-    url: "/tickets",
-    matchScore: 0.86,
-    createdAt: "2026-10-19T14:00:00Z",
-  },
-  {
-    id: "tick-3",
-    type: "ticket",
-    title: "Request access to internal analytics dashboard",
-    subtitle: "TICK-1047 · open",
-    url: "/tickets",
-    matchScore: 0.81,
-    createdAt: "2026-10-20T09:00:00Z",
-  },
-  {
-    id: "tick-4",
-    type: "ticket",
-    title: "Employee CSV import breaks on special characters",
-    subtitle: "TICK-1048 · resolved",
-    url: "/tickets",
-    matchScore: 0.77,
-    createdAt: "2026-10-21T10:00:00Z",
-  },
-  {
-    id: "tick-5",
-    type: "ticket",
-    title: "Increase pgvector index size limit for knowledge base",
-    subtitle: "TICK-1049 · acknowledged",
-    url: "/tickets",
-    matchScore: 0.74,
-    createdAt: "2026-10-22T11:00:00Z",
-  },
-];
-
-const mockProjects: SearchResult[] = [
-  {
-    id: "proj-1",
-    type: "project",
-    title: "BizContext Web Core V1",
-    subtitle: "AI Engineering & Research · active",
-    url: "/projects",
-    matchScore: 0.94,
-    createdAt: "2026-09-01T00:00:00Z",
-  },
-  {
-    id: "proj-2",
-    type: "project",
-    title: "AI Engine v2 – HyDE & pgvector Upgrade",
-    subtitle: "AI Research · active",
-    url: "/projects",
-    matchScore: 0.90,
-    createdAt: "2026-09-10T00:00:00Z",
-  },
-  {
-    id: "proj-3",
-    type: "project",
-    title: "Browser Automation Sandbox",
-    subtitle: "Infrastructure · planning",
-    url: "/projects",
-    matchScore: 0.85,
-    createdAt: "2026-09-15T00:00:00Z",
-  },
-  {
-    id: "proj-4",
-    type: "project",
-    title: "Employee Self-Service Portal",
-    subtitle: "HR · active",
-    url: "/projects",
-    matchScore: 0.80,
-    createdAt: "2026-09-20T00:00:00Z",
-  },
-  {
-    id: "proj-5",
-    type: "project",
-    title: "Compliance & Audit Trail System",
-    subtitle: "Legal & Security · completed",
-    url: "/projects",
-    matchScore: 0.75,
-    createdAt: "2026-09-25T00:00:00Z",
-  },
-];
-
-const mockFiles: SearchResult[] = [
-  {
-    id: "file-1",
-    type: "file",
-    title: "bizcontext_architecture_overview.pdf",
-    subtitle: "application/pdf",
-    url: "/storage",
-    matchScore: 0.88,
-    createdAt: "2026-10-05T10:00:00Z",
-  },
-  {
-    id: "file-2",
-    type: "file",
-    title: "priya_sharma_cv.pdf",
-    subtitle: "application/pdf",
-    url: "/storage",
-    matchScore: 0.84,
-    createdAt: "2026-10-06T11:00:00Z",
-  },
-  {
-    id: "file-3",
-    type: "file",
-    title: "Q4_okr_planning_deck.pptx",
-    subtitle: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    url: "/storage",
-    matchScore: 0.79,
-    createdAt: "2026-10-07T09:00:00Z",
-  },
-  {
-    id: "file-4",
-    type: "file",
-    title: "security_policy_v3.docx",
-    subtitle: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    url: "/storage",
-    matchScore: 0.75,
-    createdAt: "2026-10-08T14:00:00Z",
-  },
-  {
-    id: "file-5",
-    type: "file",
-    title: "employee_onboarding_checklist.xlsx",
-    subtitle: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    url: "/storage",
-    matchScore: 0.70,
-    createdAt: "2026-10-09T12:00:00Z",
-  },
-];
-
-// All mock data grouped by type
-const ALL_MOCK: Record<string, SearchResult[]> = {
-  employees: mockEmployees,
-  knowledge: mockKnowledge,
-  meetings: mockMeetings,
-  tickets: mockTickets,
-  projects: mockProjects,
-  files: mockFiles,
+// The AI engine passes resource types ("knowledge", "file", "meeting", ...) in `types`.
+const TYPE_TO_SCOPE: Record<string, Scope> = {
+  employee: "employees",
+  employees: "employees",
+  knowledge: "knowledge",
+  knowledge_page: "knowledge",
+  page: "knowledge",
+  project: "projects",
+  projects: "projects",
+  task: "projects",
+  ticket: "tickets",
+  tickets: "tickets",
+  meeting: "meetings",
+  meetings: "meetings",
+  file: "files",
+  files: "files",
 };
 
-const VALID_SCOPES = ["all", "employees", "knowledge", "projects", "tickets", "meetings", "files"] as const;
+const askSchema = z.object({ query: z.string().min(1, "query must not be empty") });
 
-// ─── Validation Schemas ───────────────────────────────────────────────────────
+/** Strip characters that carry meaning in PostgREST `or()` filters / LIKE patterns. */
+function sanitize(q: string): string {
+  return q.replace(/[,()%*\\]/g, " ").trim().slice(0, 100);
+}
 
-const askSchema = z.object({
-  query: z.string().min(1, "query must not be empty"),
-});
-
-const searchQuerySchema = z.object({
-  q: z.string().min(1, "q must not be empty"),
-  scope: z.enum(VALID_SCOPES).optional().default("all"),
-});
+function snippetOf(text: unknown, q: string): string | undefined {
+  if (typeof text !== "string" || !text) return undefined;
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  const start = Math.max(0, idx - 60);
+  return text.slice(start, start + 220).trim();
+}
 
 // ─── POST /search/ask-second-brain ───────────────────────────────────────────
-
 searchRoutes.post("/ask-second-brain", async (c) => {
-  const body = await c.req.json().catch(() => null);
-  const parsed = askSchema.safeParse(body);
+  const auth = await getFullAuthContext(c);
+  if (!auth) return c.json({ error: { message: "Unauthorized" } }, 401);
+  if (!auth.organisationId) return c.json({ error: { message: "Not a member of an organisation" } }, 403);
 
-  if (!parsed.success) {
-    return c.json({ error: "Invalid payload", details: parsed.error.issues }, 400);
-  }
+  const parsed = askSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: { message: "query is required" } }, 400);
 
-  const { query } = parsed.data;
-
-  // Extract auth & multi-tenancy context from request headers
-  const authHeader = c.req.header("Authorization");
-  const token = authHeader?.replace(/^Bearer\s+/i, "");
-  const organisationId = c.req.header("X-Organisation-Id") || "default-org";
-  const userId = c.req.header("X-User-Id") || "anonymous-user";
-
+  const token = c.req.header("Authorization")?.replace(/^Bearer\s+/i, "");
   try {
     const result = await aiEngineClient.runAgent({
-      prompt: query,
-      userId,
-      organisationId,
+      prompt: parsed.data.query,
+      userId: auth.userId,
+      organisationId: auth.organisationId,
       agentRole: "knowledge_search",
       authToken: token,
     });
-
-    const sources = (result.citations ?? []).map((c) => ({
-      title: c.title,
-      category: c.source_type,
-      matchConfidence: undefined as number | undefined,
-      link: c.url,
-      snippet: c.snippet,
-    }));
-
     return c.json({
       answer: result.response,
-      sources,
+      sources: (result.citations ?? []).map((ci) => ({
+        title: ci.title,
+        category: ci.source_type,
+        link: ci.url,
+        snippet: ci.snippet,
+      })),
       suggestedActions: [],
     });
   } catch (error: any) {
     console.error("[Search /ask-second-brain] AI engine unavailable:", error?.message);
-
-    // Fallback mock response
-    return c.json({
-      answer:
-        "Based on organisational knowledge, BizContext enforces a four-tier browser permission model (B0–B4). B3 and B4 actions require explicit human-in-the-loop supervisor approval before execution. Policies are documented in the Browser Agent Security Guidelines page.",
-      sources: [
-        {
-          title: "Browser Agent Security Guidelines",
-          category: "Security Policy",
-          matchConfidence: 96.4,
-          link: "/knowledge",
-          snippet:
-            "B3 actions require supervisor sign-off. The approval queue is monitored by the DevOps & Infrastructure Lead.",
-        },
-        {
-          title: "Employee Onboarding Handbook",
-          category: "HR Policy",
-          matchConfidence: 72.1,
-          link: "/knowledge",
-          snippet: "New hires are granted B0 browser permissions by default during their probation period.",
-        },
-      ],
-      suggestedActions: [
-        {
-          label: "View Browser Approval Queue",
-          actionType: "navigate",
-          payload: "/browser-jobs",
-        },
-        {
-          label: "Open Security Policy",
-          actionType: "navigate",
-          payload: "/knowledge",
-        },
-      ],
-    });
+    return c.json({ error: { message: "The AI engine is unavailable right now." } }, 502);
   }
 });
 
-// ─── GET /search ──────────────────────────────────────────────────────────────
-
+// ─── GET /search?q=&scope=&types=&limit= ─────────────────────────────────────
 searchRoutes.get("/", async (c) => {
-  const rawQuery = { q: c.req.query("q"), scope: c.req.query("scope") };
-  const parsed = searchQuerySchema.safeParse(rawQuery);
+  const auth = await getFullAuthContext(c);
+  if (!auth) return c.json({ error: { message: "Unauthorized" } }, 401);
+  if (!auth.organisationId) return c.json({ error: { message: "Not a member of an organisation" } }, 403);
 
-  if (!parsed.success) {
-    return c.json({ error: "Invalid query parameters", details: parsed.error.issues }, 400);
-  }
+  const q = sanitize(c.req.query("q") ?? "");
+  if (!q) return c.json({ error: { message: "q must not be empty" } }, 400);
 
-  const { q, scope } = parsed.data;
-  const lq = q.toLowerCase();
-
-  const scoredMatch = (item: SearchResult): boolean => {
-    const hay = `${item.title} ${item.subtitle ?? ""}`.toLowerCase();
-    return hay.includes(lq);
-  };
-
-  let results: SearchResult[] = [];
-
-  if (scope === "all") {
-    for (const group of Object.values(ALL_MOCK)) {
-      results.push(...group.filter(scoredMatch));
+  const rawScope = c.req.query("scope") ?? "all";
+  const scopes = new Set<Scope>();
+  const typesParam = c.req.query("types");
+  if (typesParam) {
+    for (const t of typesParam.split(",")) {
+      const s = TYPE_TO_SCOPE[t.trim().toLowerCase()];
+      if (s) scopes.add(s);
     }
-  } else {
-    results = (ALL_MOCK[scope] ?? []).filter(scoredMatch);
+  } else if ((VALID_SCOPES as readonly string[]).includes(rawScope) && rawScope !== "all") {
+    scopes.add(rawScope as Scope);
   }
+  const all = scopes.size === 0;
+  const want = (s: Scope) => all || scopes.has(s);
+  const limit = Math.min(Math.max(Number(c.req.query("limit")) || 5, 1), 25);
+
+  const orgId = auth.organisationId;
+  const supabase = getSupabaseServiceClient();
+  const like = `%${q}%`;
+  const results: SearchResult[] = [];
+
+  const tasks: Array<PromiseLike<void>> = [];
+
+  if (want("employees")) {
+    tasks.push(
+      supabase
+        .from("employee_profiles")
+        .select("id, first_name, last_name, designation, work_email, created_at")
+        .eq("organisation_id", orgId)
+        .is("deleted_at", null)
+        .or(`first_name.ilike.${like},last_name.ilike.${like},designation.ilike.${like},work_email.ilike.${like}`)
+        .limit(limit)
+        .then(({ data }) => {
+          for (const r of data ?? []) {
+            results.push({
+              id: r.id,
+              type: "employee",
+              title: `${r.first_name} ${r.last_name}`.trim(),
+              subtitle: r.designation ?? r.work_email,
+              url: "/directory",
+              createdAt: r.created_at,
+            });
+          }
+        })
+    );
+  }
+
+  if (want("knowledge")) {
+    const visibilities = requireRole(auth, "admin")
+      ? ["public", "internal", "restricted"]
+      : requireRole(auth, "member")
+        ? ["public", "internal"]
+        : ["public"];
+    tasks.push(
+      supabase
+        .from("pages")
+        .select("id, title, slug, content, visibility, created_at")
+        .eq("organisation_id", orgId)
+        .in("visibility", visibilities)
+        .or(`title.ilike.${like},content.ilike.${like}`)
+        .limit(limit)
+        .then(({ data }) => {
+          for (const r of data ?? []) {
+            results.push({
+              id: r.id,
+              type: "knowledge",
+              title: r.title,
+              subtitle: r.visibility,
+              snippet: snippetOf(r.content, q),
+              url: `/knowledge?page=${r.slug ?? r.id}`,
+              createdAt: r.created_at,
+            });
+          }
+        })
+    );
+  }
+
+  if (want("projects")) {
+    tasks.push(
+      supabase
+        .from("projects")
+        .select("id, name, description, status, created_at")
+        .eq("organisation_id", orgId)
+        .or(`name.ilike.${like},description.ilike.${like}`)
+        .limit(limit)
+        .then(({ data }) => {
+          for (const r of data ?? []) {
+            results.push({
+              id: r.id,
+              type: "project",
+              title: r.name,
+              subtitle: r.status,
+              snippet: snippetOf(r.description, q),
+              url: "/projects",
+              createdAt: r.created_at,
+            });
+          }
+        })
+    );
+  }
+
+  if (want("tickets")) {
+    tasks.push(
+      supabase
+        .from("tickets")
+        .select("id, ticket_number, title, description, status, created_at")
+        .eq("organisation_id", orgId)
+        .or(`title.ilike.${like},description.ilike.${like},ticket_number.ilike.${like}`)
+        .limit(limit)
+        .then(({ data }) => {
+          for (const r of data ?? []) {
+            results.push({
+              id: r.id,
+              type: "ticket",
+              title: r.title,
+              subtitle: `${r.ticket_number} · ${r.status}`,
+              snippet: snippetOf(r.description, q),
+              url: "/tickets",
+              createdAt: r.created_at,
+            });
+          }
+        })
+    );
+  }
+
+  if (want("meetings")) {
+    tasks.push(
+      supabase
+        .from("meetings")
+        .select("id, title, agenda, minutes_content, meeting_date, created_at")
+        .eq("organisation_id", orgId)
+        .or(`title.ilike.${like},agenda.ilike.${like},minutes_content.ilike.${like}`)
+        .limit(limit)
+        .then(({ data }) => {
+          for (const r of data ?? []) {
+            results.push({
+              id: r.id,
+              type: "meeting",
+              title: r.title,
+              subtitle: String(r.meeting_date ?? "").slice(0, 10),
+              snippet: snippetOf(r.minutes_content ?? r.agenda, q),
+              url: "/meetings",
+              createdAt: r.created_at,
+            });
+          }
+        })
+    );
+  }
+
+  if (want("files")) {
+    tasks.push(
+      supabase
+        .from("files")
+        .select("id, filename, mime_type, visibility, created_at")
+        .eq("organisation_id", orgId)
+        .is("deleted_at", null)
+        .ilike("filename", like)
+        .limit(limit)
+        .then(({ data }) => {
+          for (const r of data ?? []) {
+            // Restricted files are not discoverable by non-admins.
+            if (r.visibility === "restricted" && !requireRole(auth, "admin")) continue;
+            results.push({
+              id: r.id,
+              type: "file",
+              title: r.filename,
+              subtitle: r.mime_type,
+              url: "/storage",
+              createdAt: r.created_at,
+            });
+          }
+        })
+    );
+  }
+
+  await Promise.all(tasks);
 
   return c.json({
     results,
     totalCount: results.length,
     query: q,
-    scope,
+    scope: all ? "all" : [...scopes].join(","),
   });
 });
 

@@ -17,6 +17,7 @@ from app.api.schemas import (
 )
 from app.config import settings
 from app.harness.context import HarnessContext
+from app.harness.council import council_roster, stream_council
 from app.harness.runner import run_harness, stream_harness
 from app.harness.tools import ALL_HARNESS_TOOLS
 
@@ -109,18 +110,42 @@ async def stream_agent(
             {"role": msg.role, "content": msg.content} for msg in payload.chat_history
         ]
 
-    async def sse_event_generator() -> AsyncGenerator[str, None]:
+    async def sse_event_generator() -> AsyncGenerator[dict, None]:
         async for item in stream_harness(
             prompt=payload.prompt,
             context=context,
             chat_history=chat_history_list,
             custom_system_prompt=payload.system_prompt,
         ):
-            event_type = item.get("event", "message")
-            data_payload = json.dumps(item.get("data", {}))
-            yield f"event: {event_type}\ndata: {data_payload}\n\n"
+            # Yield dicts: EventSourceResponse formats them. A pre-formatted string
+            # would be wrapped again and every line prefixed with `data:`.
+            yield {"event": item.get("event", "message"), "data": json.dumps(item.get("data", {}), default=str)}
 
     return EventSourceResponse(sse_event_generator())
+
+
+@router.post("/agent/council/stream")
+async def stream_council_route(
+    payload: AgentRunRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Runs the Agent Council (Knowledge | Researcher | Browser in parallel, then CEO decision) over SSE."""
+    context = HarnessContext(
+        user_id=payload.user_id,
+        organisation_id=payload.organisation_id,
+        conversation_id=payload.conversation_id or str(uuid.uuid4()),
+        auth_token=_extract_bearer_token(authorization),
+        allowed_tools=payload.allowed_tools,
+        extra_metadata=payload.metadata or {},
+    )
+    history = [{"role": m.role, "content": m.content} for m in payload.chat_history] if payload.chat_history else None
+    return EventSourceResponse(stream_council(payload.prompt, context, history))
+
+
+@router.get("/agent/council")
+async def council_info():
+    """Describes the council roster."""
+    return {"agents": council_roster(), "parallel": ["knowledge", "researcher", "browser"], "final": "ceo"}
 
 
 @router.get("/agent/tools", response_model=ToolsListResponse)

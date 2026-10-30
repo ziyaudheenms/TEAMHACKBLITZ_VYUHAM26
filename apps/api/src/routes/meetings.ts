@@ -24,7 +24,7 @@ import {
   buildMeetingAnalysisPrompt,
   type ExtractedActionItemResult,
 } from "@bizcontext/module-meetings";
-import { getSupabaseServiceClient } from "../lib/supabase";
+import { getSupabaseServiceClient, resolveMembership } from "../lib/supabase";
 import { getAuthContext, type AuthContext } from "../lib/auth";
 import { aiEngineClient } from "../services/ai-engine.client";
 
@@ -61,41 +61,24 @@ async function resolveOrgContext(
 
   const supabase = getSupabaseServiceClient();
 
-  // Header override if specified, otherwise query organisation_members
-  const headerOrgId = c.req.header("X-Organisation-Id");
-  let organisationId = headerOrgId;
-
-  if (!organisationId) {
-    const { data: member } = await supabase
-      .from("organisation_members")
-      .select("organisation_id")
-      .eq("user_id", auth.userId)
-      .is("left_at", null)
-      .order("joined_at", { ascending: false })
-      .limit(1)
-      .single();
-
-    if (member?.organisation_id) {
-      organisationId = member.organisation_id as string;
-    }
+  // Never trust the header as a grant of access: it may only select among organisations the
+  // caller belongs to (super admins: any organisation). The previous dev fallbacks that fell
+  // through to "the first organisation" let any user read another tenant's meetings.
+  const membership = await resolveMembership(auth.userId, auth.isSuperAdmin, c.req.header("X-Organisation-Id"));
+  if (!membership) {
+    return {
+      ok: false,
+      response: errorResponse(c, 403, "You are not an active member of any organisation") as Response,
+    };
   }
-
-  // Fallback to first organisation if available (e.g. initial dev seed)
-  if (!organisationId) {
-    const { data: firstOrg } = await supabase
-      .from("organisations")
-      .select("id")
-      .limit(1)
-      .single();
-    organisationId = firstOrg?.id ?? "00000000-0000-0000-0000-000000000001";
-  }
+  const organisationId = membership.organisationId;
 
   const { data: profile } = await supabase
     .from("employee_profiles")
     .select("first_name, last_name")
     .eq("user_id", auth.userId)
     .limit(1)
-    .single();
+    .maybeSingle();
 
   const userName = profile
     ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || auth.email

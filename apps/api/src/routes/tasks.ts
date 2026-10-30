@@ -1,13 +1,10 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { getSupabaseServiceClient } from "../lib/supabase";
-import { getAuthContext } from "../lib/auth";
+import { getFullAuthContext, requireRole } from "../lib/auth";
 
 const tasksRoutes = new Hono();
 
-// ---------------------------------------------------------------------------
-// Helper
-// ---------------------------------------------------------------------------
 function err(c: Context, status: 400 | 401 | 403 | 404 | 500, message: string) {
   return c.json({ error: { message } }, status);
 }
@@ -38,67 +35,50 @@ function toTask(row: Record<string, unknown>) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// GET /tasks — list tasks, optional ?projectId=
-// ---------------------------------------------------------------------------
+// GET /tasks — org-scoped list, optional ?projectId=
 tasksRoutes.get("/", async (c) => {
-  const auth = await getAuthContext(c);
+  const auth = await getFullAuthContext(c);
   if (!auth) return err(c, 401, "Unauthorized");
+  if (!auth.organisationId || !requireRole(auth, "guest")) return err(c, 403, "Not a member of an organisation");
 
   const projectId = c.req.query("projectId");
-  const supabase = getSupabaseServiceClient();
-
-  let query = supabase
+  let query = getSupabaseServiceClient()
     .from("tasks")
     .select("*")
+    .eq("organisation_id", auth.organisationId)
     .order("created_at", { ascending: false });
-
-  if (projectId) {
-    query = query.eq("project_id", projectId);
-  }
+  if (projectId) query = query.eq("project_id", projectId);
 
   const { data, error } = await query;
-
   if (error) {
     console.error("[tasks] list error:", error.message);
     return err(c, 500, "Failed to fetch tasks");
   }
-
   return c.json({ data: (data ?? []).map((r) => toTask(r as Record<string, unknown>)) }, 200);
 });
 
-// ---------------------------------------------------------------------------
-// POST /tasks — create a new task
-// ---------------------------------------------------------------------------
+// POST /tasks — member+
 tasksRoutes.post("/", async (c) => {
-  const auth = await getAuthContext(c);
+  const auth = await getFullAuthContext(c);
   if (!auth) return err(c, 401, "Unauthorized");
+  if (!auth.organisationId || !requireRole(auth, "member")) return err(c, 403, "Requires 'member' role");
 
-  const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
-  if (!body || !body.title) {
-    return err(c, 400, "title is required");
-  }
+  const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body || !body.title) return err(c, 400, "title is required");
 
-  const supabase = getSupabaseServiceClient();
-
-  const insert: Record<string, unknown> = {
-    title: String(body.title).trim(),
-    description: body.description ? String(body.description).trim() : null,
-    project_id: (body.projectId as string) ?? null,
-    primary_assignee_id: (body.primaryAssigneeId as string) ?? null,
-    priority: (body.priority as string) ?? "medium",
-    status: (body.status as string) ?? "open",
-    due_date: (body.dueDate as string) ?? null,
-    created_by: auth.userId,
-  };
-
-  if (body.organisationId) {
-    insert.organisation_id = body.organisationId;
-  }
-
-  const { data, error } = await supabase
+  const { data, error } = await getSupabaseServiceClient()
     .from("tasks")
-    .insert(insert)
+    .insert({
+      title: String(body.title).trim(),
+      description: body.description ? String(body.description).trim() : null,
+      project_id: (body.projectId as string) ?? null,
+      primary_assignee_id: (body.primaryAssigneeId as string) ?? null,
+      priority: (body.priority as string) ?? "medium",
+      status: (body.status as string) ?? "open",
+      due_date: (body.dueDate as string) ?? null,
+      created_by: auth.userId,
+      organisation_id: auth.organisationId,
+    })
     .select("*")
     .single();
 
@@ -106,57 +86,37 @@ tasksRoutes.post("/", async (c) => {
     console.error("[tasks] create error:", error?.message);
     return err(c, 500, "Failed to create task");
   }
-
   return c.json({ data: toTask(data as Record<string, unknown>) }, 201);
 });
 
-// ---------------------------------------------------------------------------
-// PATCH /tasks/:id/status — update Kanban lane
-// ---------------------------------------------------------------------------
-tasksRoutes.patch("/:id/status", async (c) => {
-  const auth = await getAuthContext(c);
+async function updateStatus(c: Context) {
+  const auth = await getFullAuthContext(c);
   if (!auth) return err(c, 401, "Unauthorized");
+  if (!auth.organisationId || !requireRole(auth, "member")) return err(c, 403, "Requires 'member' role");
 
   const { id } = c.req.param();
-  const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
-
-  if (!body || !body.status) {
-    return err(c, 400, "status is required");
-  }
-
+  const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body || !body.status) return err(c, 400, "status is required");
   if (!VALID_STATUSES.includes(body.status as TaskStatus)) {
     return err(c, 400, `status must be one of: ${VALID_STATUSES.join(", ")}`);
   }
 
-  const supabase = getSupabaseServiceClient();
-
-  // Verify the task exists
-  const { data: existing, error: fetchError } = await supabase
+  const { data, error } = await getSupabaseServiceClient()
     .from("tasks")
-    .select("id")
+    .update({ status: body.status as string, updated_at: new Date().toISOString() })
     .eq("id", id)
-    .single();
-
-  if (fetchError || !existing) {
-    return err(c, 404, "Task not found");
-  }
-
-  const { data, error } = await supabase
-    .from("tasks")
-    .update({
-      status: body.status as string,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
+    .eq("organisation_id", auth.organisationId)
     .select("*")
-    .single();
+    .maybeSingle();
 
-  if (error || !data) {
-    console.error("[tasks] status update error:", error?.message);
-    return err(c, 500, "Failed to update task status");
-  }
-
+  if (error) return err(c, 500, "Failed to update task status");
+  if (!data) return err(c, 404, "Task not found");
   return c.json({ data: toTask(data as Record<string, unknown>) }, 200);
-});
+}
+
+// PATCH /tasks/:id/status — Kanban lane (frontend)
+tasksRoutes.patch("/:id/status", updateStatus);
+// PATCH /tasks/:id — generic status update (AI engine tool)
+tasksRoutes.patch("/:id", updateStatus);
 
 export default tasksRoutes;

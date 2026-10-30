@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     backend_service_token: Optional[str] = None
     backend_request_timeout_seconds: float = 30.0
 
+    # Web access tools (browser tier B1: read-only). Comma-separated domain allow-list;
+    # empty means any public (non-private) host is allowed.
+    web_allowed_domains: Optional[str] = None
+    web_fetch_max_bytes: int = 1_000_000
+    council_agent_timeout_seconds: float = 90.0
+
     # Service Configuration
     ai_engine_port: int = 8000
     ai_engine_host: str = "0.0.0.0"

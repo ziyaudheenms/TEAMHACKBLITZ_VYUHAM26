@@ -6,6 +6,7 @@
     "dev": "bun --watch src/index.ts",
     "build": "bun build src/index.ts --outdir dist",
     "start": "bun src/index.ts",
+    "seed:admin": "bun --env-file=../../.env scripts/seed-super-admin.ts",
     "lint": "oxlint src"
   },
   "dependencies": {

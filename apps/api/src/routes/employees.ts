@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { CreateEmployeeSchema } from "@bizcontext/validation";
 import { getSupabaseServiceClient } from "../lib/supabase";
-import { getAuthContext } from "../lib/auth";
+import { enforceRole, getFullAuthContext, writeAuditLog } from "../lib/auth";
 
 const employeesRoutes = new Hono();
 
@@ -47,13 +47,15 @@ function toEmployeeResponse(row: Record<string, unknown>): EmployeeResponse {
 
 // POST /api/v1/employees
 employeesRoutes.post("/", async (c) => {
-  const auth = await getAuthContext(c);
-  if (!auth) {
-    return c.json({ error: { message: "Unauthorized" } }, 401);
+  // Managing the people directory is an admin-level action.
+  const { context: auth, response: denied } = await enforceRole(c, "admin");
+  if (denied) return denied;
+  if (!auth.organisationId) {
+    return c.json({ error: { message: "Not a member of an organisation" } }, 403);
   }
 
   const body = await c.req.json().catch(() => null);
-  const parsed = CreateEmployeeSchema.safeParse(body);
+  const parsed = CreateEmployeeSchema.safeParse({ ...(body ?? {}), organisationId: auth.organisationId });
   if (!parsed.success) {
     return c.json({ error: { message: "Validation failed" } }, 400);
   }
@@ -89,33 +91,70 @@ employeesRoutes.post("/", async (c) => {
     return c.json({ error: { message: error.message } }, 400);
   }
 
+  await writeAuditLog({
+    organisationId,
+    actorId: auth.userId,
+    action: "employee.create",
+    resourceType: "employee_profile",
+    resourceId: (data as Record<string, unknown>).id as string,
+  });
+
   const employee = toEmployeeResponse((data ?? {}) as Record<string, unknown>);
   return c.json(employee, 201);
 });
 
 // GET /api/v1/employees
 employeesRoutes.get("/", async (c) => {
-  const auth = await getAuthContext(c);
+  const auth = await getFullAuthContext(c);
   if (!auth) {
     return c.json({ error: { message: "Unauthorized" } }, 401);
   }
+  if (!auth.organisationId) {
+    return c.json({ error: { message: "Not a member of an organisation" } }, 403);
+  }
 
   const supabase = getSupabaseServiceClient();
-  const { data, error } = await supabase.from("employee_profiles").select("*");
+  const { data, error } = await supabase
+    .from("employee_profiles")
+    .select("*")
+    .eq("organisation_id", auth.organisationId)
+    .is("deleted_at", null);
 
   if (error) {
     return c.json({ error: { message: error.message } }, 500);
   }
 
-  const employees = (data ?? []).map((row) => toEmployeeResponse(row as Record<string, unknown>));
+  let employees = (data ?? []).map((row) => toEmployeeResponse(row as Record<string, unknown>));
+
+  // Optional filters used by the AI engine's directory tool: ?q=name/title&skills=a,b
+  const q = c.req.query("q")?.toLowerCase().trim();
+  const skills = c.req
+    .query("skills")
+    ?.split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (q) {
+    employees = employees.filter((e) =>
+      `${e.firstName} ${e.lastName} ${e.designation ?? ""}`.toLowerCase().includes(q)
+    );
+  }
+  if (skills?.length) {
+    employees = employees.filter((e) =>
+      skills.some((s) => e.skills.some((k) => k.name.toLowerCase().includes(s)))
+    );
+  }
+
   return c.json({ employees }, 200);
 });
 
 // GET /api/v1/employees/:id
 employeesRoutes.get("/:id", async (c) => {
-  const auth = await getAuthContext(c);
+  const auth = await getFullAuthContext(c);
   if (!auth) {
     return c.json({ error: { message: "Unauthorized" } }, 401);
+  }
+  if (!auth.organisationId) {
+    return c.json({ error: { message: "Not a member of an organisation" } }, 403);
   }
 
   const id = c.req.param("id");
@@ -124,6 +163,7 @@ employeesRoutes.get("/:id", async (c) => {
     .from("employee_profiles")
     .select("*")
     .eq("id", id)
+    .eq("organisation_id", auth.organisationId)
     .single();
 
   if (error) {

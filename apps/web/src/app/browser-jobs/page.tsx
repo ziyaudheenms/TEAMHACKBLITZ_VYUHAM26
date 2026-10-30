@@ -12,8 +12,10 @@ import {
 } from "lucide-react";
 import { api } from "../../services/api";
 import { BrowserJob, BrowserPermissionLevel } from "../../types";
+import { useRBAC } from "../../lib/useRBAC";
 
 export default function BrowserJobsPage() {
+  const { canApproveBrowserJobs } = useRBAC();
   const [jobs, setJobs] = useState<BrowserJob[]>([]);
   const [selectedJob, setSelectedJob] = useState<BrowserJob | null>(null);
   const [isLaunchModalOpen, setIsLaunchModalOpen] = useState(false);
@@ -37,9 +39,13 @@ export default function BrowserJobsPage() {
   };
 
   const handleDecision = async (jobId: string, decision: "approved" | "rejected") => {
-    const updated = await api.approveBrowserJob(jobId, decision);
-    setJobs(jobs.map((j) => (j.id === updated.id ? updated : j)));
-    if (selectedJob?.id === jobId) setSelectedJob(updated);
+    try {
+      const updated = await api.approveBrowserJob(jobId, decision);
+      setJobs(jobs.map((j) => (j.id === updated.id ? updated : j)));
+      if (selectedJob?.id === jobId) setSelectedJob(updated);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Could not record the decision");
+    }
   };
 
   const handleLaunchJob = async (e: React.FormEvent) => {
@@ -182,6 +188,12 @@ export default function BrowserJobsPage() {
                   </div>
                 </div>
 
+                {!canApproveBrowserJobs && (
+                  <p className="text-[11px] font-semibold text-amber-800 pt-2 border-t border-amber-200">
+                    Waiting for an admin or owner to review this action.
+                  </p>
+                )}
+                {canApproveBrowserJobs && (
                 <div className="flex justify-end space-x-3 pt-2 border-t border-amber-200">
                   <button
                     onClick={() => handleDecision(selectedJob.id, "rejected")}
@@ -198,6 +210,7 @@ export default function BrowserJobsPage() {
                     <span>Approve & Authorize Step</span>
                   </button>
                 </div>
+                )}
               </div>
             )}
 

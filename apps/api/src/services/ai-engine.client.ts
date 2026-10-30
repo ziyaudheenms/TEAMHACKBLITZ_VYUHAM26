@@ -90,7 +90,16 @@ export class AIEngineClient {
     return (await res.json()) as AIRunResponse;
   }
 
+  /** Agent Council: Knowledge | Researcher | Browser in parallel, then the CEO decision (SSE). */
+  async streamCouncil(payload: AIRunPayload): Promise<ReadableStream<Uint8Array>> {
+    return this.openStream("/api/v1/agent/council/stream", payload);
+  }
+
   async streamAgent(payload: AIRunPayload): Promise<ReadableStream<Uint8Array>> {
+    return this.openStream("/api/v1/agent/stream", payload);
+  }
+
+  private async openStream(path: string, payload: AIRunPayload): Promise<ReadableStream<Uint8Array>> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
@@ -104,7 +113,7 @@ export class AIEngineClient {
     headers["X-User-Id"] = payload.userId;
     headers["X-Client-Source"] = "bizcontext-backend";
 
-    const res = await fetch(`${this.baseUrl}/api/v1/agent/stream`, {
+    const res = await fetch(`${this.baseUrl}${path}`, {
       method: "POST",
       headers,
       body: JSON.stringify({

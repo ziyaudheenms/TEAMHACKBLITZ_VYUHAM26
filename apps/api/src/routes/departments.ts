@@ -49,6 +49,7 @@ import {
 import {
   extractBearerToken,
   resolveAuthUser,
+  resolveMembership,
   getSupabaseServiceClient,
 } from "../lib/supabase";
 
@@ -79,27 +80,18 @@ async function resolveUserContext(c: Context): Promise<
     return { ok: false, response: errorResponse(c, 401, "Missing bearer token") as Response };
   }
 
-  const { userId, error: authError } = await resolveAuthUser(token);
+  const { userId, isSuperAdmin, error: authError } = await resolveAuthUser(token);
   if (authError || !userId) {
     return {
       ok: false,
-      response: errorResponse(c, 401, "Invalid or expired token") as Response,
+      response: errorResponse(c, 401, authError?.message ?? "Invalid or expired token") as Response,
     };
   }
 
-  // Fetch the user's active organisation membership from the service client
-  // so RLS does not interfere with the cross-table lookup.
-  const supabase = getSupabaseServiceClient();
-  const { data: member, error: memberError } = await supabase
-    .from("organisation_members")
-    .select("organisation_id, role")
-    .eq("user_id", userId)
-    .is("left_at", null) // still an active member
-    .order("joined_at", { ascending: false })
-    .limit(1)
-    .single();
+  const resolved = await resolveMembership(userId, isSuperAdmin, c.req.header("X-Organisation-Id"));
+  const member = resolved ? { organisation_id: resolved.organisationId, role: resolved.role } : null;
 
-  if (memberError || !member) {
+  if (!member) {
     return {
       ok: false,
       response: errorResponse(

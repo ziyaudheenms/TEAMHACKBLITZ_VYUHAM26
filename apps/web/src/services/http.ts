@@ -22,6 +22,8 @@ export interface StoredSession {
   user: SessionUser;
   organisationId: string | null;
   role: string | null;
+  /** UI hint only; every admin endpoint re-checks this on the server. */
+  isSuperAdmin?: boolean;
 }
 
 interface AuthResponse {
@@ -63,7 +65,7 @@ export const sessionStore = {
 
 export function toStoredSession(
   res: AuthResponse,
-  previous?: Pick<StoredSession, "organisationId" | "role"> | null
+  previous?: Pick<StoredSession, "organisationId" | "role" | "isSuperAdmin"> | null
 ): StoredSession {
   return {
     accessToken: res.session.accessToken,
@@ -72,6 +74,7 @@ export function toStoredSession(
     user: res.user,
     organisationId: previous?.organisationId ?? null,
     role: previous?.role ?? null,
+    isSuperAdmin: previous?.isSuperAdmin ?? false,
   };
 }
 
@@ -159,6 +162,39 @@ export async function http<T>(
   }
 
   return (await res.json()) as T;
+}
+
+/**
+ * Authenticated streaming POST (SSE). Returns the raw Response so the caller can read
+ * the body incrementally. Refreshes the session once on a 401, like http().
+ * Throws ApiError for network failures (status 0) and non-2xx responses.
+ */
+export async function streamRequest(
+  baseUrl: string,
+  path: string,
+  body: unknown,
+  signal?: AbortSignal
+): Promise<Response> {
+  const send = () => {
+    const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "text/event-stream" };
+    const session = sessionStore.get();
+    if (session) {
+      headers.Authorization = `Bearer ${session.accessToken}`;
+      if (session.organisationId) headers["X-Organisation-Id"] = session.organisationId;
+    }
+    return fetch(`${baseUrl}${path}`, { method: "POST", headers, body: JSON.stringify(body), signal });
+  };
+
+  let res: Response;
+  try {
+    res = await send();
+    if (res.status === 401 && (await refreshSession(baseUrl))) res = await send();
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new ApiError("Cannot reach the server. Check that the API is running.", 0);
+  }
+  if (!res.ok || !res.body) throw new ApiError(await parseError(res), res.status);
+  return res;
 }
 
 export type { AuthResponse };

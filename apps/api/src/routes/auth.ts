@@ -1,7 +1,13 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { SignUpSchema, LoginSchema, RefreshTokenSchema } from "@bizcontext/validation";
-import { getSupabaseAnonClient, getSupabaseServiceClient } from "../lib/supabase";
+import {
+  getSupabaseAnonClient,
+  getSupabaseServiceClient,
+  isUserBlocked,
+  resolveIdentity,
+  resolveMembership,
+} from "../lib/supabase";
 import type { Session, User } from "@supabase/supabase-js";
 
 const authRoutes = new Hono();
@@ -24,6 +30,16 @@ export interface AuthMeResponse {
   user: AuthUserResponse;
   organisationId: string | null;
   role: string | null;
+  isSuperAdmin: boolean;
+}
+
+/** True (and the just-issued session revoked) when the user is blocked. Fails closed on lookup errors. */
+async function rejectIfBlocked(user: User, accessToken: string): Promise<boolean> {
+  if (user.app_metadata?.is_super_admin === true) return false;
+  const blocked = await isUserBlocked(user.id);
+  if (blocked === false) return false;
+  await getSupabaseServiceClient().auth.admin.signOut(accessToken, "global").catch(() => {});
+  return true;
 }
 
 function toUserResponse(user: User): AuthUserResponse {
@@ -159,11 +175,17 @@ authRoutes.post("/login", async (c) => {
   });
 
   if (error) {
+    // Supabase reports banned accounts as "User is banned"; give them our clearer message.
+    if (/banned/i.test(error.message)) return errorMessage(c, 403, "This account has been blocked. Contact an administrator.");
     return errorMessage(c, 401, error.message || "Invalid email or password");
   }
 
   if (!data.session || !data.user) {
     return errorMessage(c, 401, "Invalid email or password");
+  }
+
+  if (await rejectIfBlocked(data.user, data.session.access_token)) {
+    return errorMessage(c, 403, "This account has been blocked. Contact an administrator.");
   }
 
   return c.json({ user: toUserResponse(data.user), session: toSessionResponse(data.session) }, 200);
@@ -209,6 +231,10 @@ authRoutes.post("/refresh", async (c) => {
     return errorMessage(c, 401, "Failed to refresh session");
   }
 
+  if (await rejectIfBlocked(data.user, data.session.access_token)) {
+    return errorMessage(c, 401, "This account has been blocked. Contact an administrator.");
+  }
+
   return c.json({ user: toUserResponse(data.user), session: toSessionResponse(data.session) }, 200);
 });
 
@@ -221,28 +247,26 @@ authRoutes.get("/me", async (c) => {
     return errorMessage(c, 401, "Missing bearer token");
   }
 
-  const supabase = getSupabaseAnonClient();
-  const { data, error } = await supabase.auth.getUser(token);
-
-  if (error || !data.user) {
-    return errorMessage(c, 401, "Invalid or expired token");
+  const result = await resolveIdentity(token);
+  if (!result.ok) {
+    return errorMessage(
+      c,
+      401,
+      result.reason === "blocked" ? "This account has been blocked. Contact an administrator." : "Invalid or expired token"
+    );
   }
+  const { user, isSuperAdmin } = result.identity;
 
-  const user = data.user;
-  const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
-  const organisationId =
-    (user.app_metadata?.organisationId as string | undefined) ??
-    (metadata.organisationId as string | undefined) ??
-    null;
-  const role =
-    (user.app_metadata?.role as string | undefined) ??
-    (metadata.role as string | undefined) ??
-    null;
+  // Source of truth for org + role is organisation_members (RBAC); super admins act in any org as owner.
+  const membership = await resolveMembership(user.id, isSuperAdmin, c.req.header("X-Organisation-Id"));
+  const organisationId = membership?.organisationId ?? null;
+  const role = isSuperAdmin ? "owner" : (membership?.role ?? null);
 
   const meResponse: AuthMeResponse = {
     user: toUserResponse(user),
-    organisationId: organisationId ?? null,
-    role: role ?? null,
+    organisationId,
+    role,
+    isSuperAdmin,
   };
 
   return c.json(meResponse, 200);

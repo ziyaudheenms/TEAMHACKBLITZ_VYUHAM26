@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 from pydantic_ai import RunContext
 
 from app.harness.context import HarnessContext
+from app.harness.web import fetch_web_page, web_search
 
 logger = logging.getLogger(__name__)
 
@@ -367,4 +368,6 @@ ALL_HARNESS_TOOLS = [
     create_ticket,
     dispatch_browser_job,
     call_backend_tool,
+    web_search,
+    fetch_web_page,
 ]

@@ -20,7 +20,8 @@ def create_bizcontext_agent(
     """Creates a configured Pydantic AI Agent connected to the Gemini model and Second Brain tools."""
     resolved_model = model or get_harness_model()
     base_instructions = custom_system_prompt or SYSTEM_PROMPT_HARNESS
-    assigned_tools = tools or ALL_HARNESS_TOOLS
+    # `None` means all tools; an explicit empty list means a tool-less agent (e.g. the CEO).
+    assigned_tools = ALL_HARNESS_TOOLS if tools is None else tools
 
     agent = Agent(
         model=resolved_model,

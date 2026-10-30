@@ -15,6 +15,9 @@ import notificationsRoutes from "./routes/notifications";
 import meetingsRoutes from "./routes/meetings";
 import analyticsRoutes from "./routes/analytics";
 import searchRoutes from "./routes/search";
+import agentsRoutes from "./routes/agents";
+import browserJobsRoutes from "./routes/browser-jobs";
+import adminRoutes from "./routes/admin";
 
 const app = new Hono();
 const v1 = new Hono();
@@ -74,6 +77,9 @@ v1.route("/notifications", notificationsRoutes);
 v1.route("/meetings", meetingsRoutes);
 v1.route("/search", searchRoutes);
 v1.route("/analytics", analyticsRoutes);
+v1.route("/agents", agentsRoutes);
+v1.route("/browser-jobs", browserJobsRoutes);
+v1.route("/admin", adminRoutes);
 
 app.route("/api/v1", v1);
 
