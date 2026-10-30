@@ -19,7 +19,29 @@ import {
   Layers,
 } from "lucide-react";
 import { api } from "../../services/api";
+import { ApiError } from "../../services/http";
 import type { SearchResult, SecondBrainResponse } from "../../types";
+
+function aiErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 0) return err.message;
+    if (err.status === 403) return `You don't have access to the AI assistant: ${err.message}`;
+    if (err.status === 502 || err.status === 503 || err.status === 504) {
+      return `The AI engine is unavailable right now. Try again in a moment. (${err.message})`;
+    }
+    return err.message;
+  }
+  return err instanceof Error && err.message ? err.message : "The AI engine did not respond.";
+}
+
+function searchErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 0) return err.message;
+    if (err.status === 403) return `You don't have access to search: ${err.message}`;
+    return err.message;
+  }
+  return err instanceof Error && err.message ? err.message : "Search failed.";
+}
 
 interface SecondBrainModalProps {
   isOpen: boolean;
@@ -94,7 +116,9 @@ export const SecondBrainModal: React.FC<SecondBrainModalProps> = ({ isOpen, onCl
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchTotal, setSearchTotal] = useState(0);
   const [isSearchLoading, setIsSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchRequestRef = useRef(0);
 
   // ── Input refs ─────────────────────────────────────────────────
   const askInputRef = useRef<HTMLInputElement>(null);
@@ -126,21 +150,29 @@ export const SecondBrainModal: React.FC<SecondBrainModalProps> = ({ isOpen, onCl
     (q: string, scope: Scope) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       if (!q.trim()) {
+        searchRequestRef.current += 1; // drop any in-flight response
         setSearchResults([]);
         setSearchTotal(0);
+        setSearchError(null);
+        setIsSearchLoading(false);
         return;
       }
       debounceRef.current = setTimeout(async () => {
+        const requestId = ++searchRequestRef.current;
         setIsSearchLoading(true);
+        setSearchError(null);
         try {
           const res = await api.searchGlobal(q.trim(), scope);
+          if (requestId !== searchRequestRef.current) return;
           setSearchResults(res.results);
           setSearchTotal(res.totalCount);
-        } catch {
+        } catch (err) {
+          if (requestId !== searchRequestRef.current) return;
           setSearchResults([]);
           setSearchTotal(0);
+          setSearchError(searchErrorMessage(err));
         } finally {
-          setIsSearchLoading(false);
+          if (requestId === searchRequestRef.current) setIsSearchLoading(false);
         }
       }, 300);
     },
@@ -162,12 +194,13 @@ export const SecondBrainModal: React.FC<SecondBrainModalProps> = ({ isOpen, onCl
     if (!askQuery.trim() || isAskLoading) return;
     setIsAskLoading(true);
     setAskError(null);
+    setAskResult(null);
     try {
       const res = await api.askSecondBrain(askQuery.trim());
       setAskResult(res);
     } catch (err) {
       setAskResult(null);
-      setAskError(err instanceof Error ? err.message : "The AI engine did not respond.");
+      setAskError(aiErrorMessage(err));
     } finally {
       setIsAskLoading(false);
     }
@@ -186,19 +219,19 @@ export const SecondBrainModal: React.FC<SecondBrainModalProps> = ({ isOpen, onCl
   // ── Render ─────────────────────────────────────────────────────
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 bg-black/40 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-6 sm:pt-20 bg-black/40 backdrop-blur-sm p-2 sm:p-4"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
       role="dialog"
       aria-modal="true"
       aria-label="BizContext Second Brain"
     >
-      <div className="w-full max-w-2xl rounded-3xl border border-[#DEDEDE] bg-white shadow-2xl text-[#262626] flex flex-col max-h-[82vh] overflow-hidden">
+      <div className="w-full max-w-2xl rounded-3xl border border-[#DEDEDE] bg-white shadow-2xl text-[#262626] flex flex-col max-h-[90vh] sm:max-h-[82vh] overflow-hidden">
         {/* ── Tab bar ── */}
-        <div className="flex items-center gap-1 px-4 pt-4 pb-3 border-b border-[#EDEDED] shrink-0">
+        <div className="flex items-center gap-1 px-3 sm:px-4 pt-3 sm:pt-4 pb-2.5 sm:pb-3 border-b border-[#EDEDED] shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab("ask")}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-semibold transition cursor-pointer ${
               activeTab === "ask"
                 ? "bg-[#74D96F]/20 text-[#2C8A28]"
                 : "text-[#666666] hover:bg-[#F5F5F5]"
@@ -210,7 +243,7 @@ export const SecondBrainModal: React.FC<SecondBrainModalProps> = ({ isOpen, onCl
           <button
             type="button"
             onClick={() => setActiveTab("search")}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-semibold transition cursor-pointer ${
               activeTab === "search"
                 ? "bg-[#74D96F]/20 text-[#2C8A28]"
                 : "text-[#666666] hover:bg-[#F5F5F5]"
@@ -232,7 +265,7 @@ export const SecondBrainModal: React.FC<SecondBrainModalProps> = ({ isOpen, onCl
 
         {/* ══════════ ASK AI TAB ══════════ */}
         {activeTab === "ask" && (
-          <div className="flex flex-col overflow-hidden px-5 pb-5 pt-4">
+          <div className="flex flex-col overflow-hidden px-3.5 sm:px-5 pb-4 sm:pb-5 pt-3 sm:pt-4">
             <form onSubmit={handleAskSubmit} className="relative flex items-center shrink-0">
               <Sparkles className="w-4 h-4 text-[#56BE51] absolute left-4" />
               <input
@@ -331,7 +364,7 @@ export const SecondBrainModal: React.FC<SecondBrainModalProps> = ({ isOpen, onCl
 
         {/* ══════════ SEARCH TAB ══════════ */}
         {activeTab === "search" && (
-          <div className="flex flex-col overflow-hidden px-5 pb-5 pt-4 gap-3">
+          <div className="flex flex-col overflow-hidden px-3.5 sm:px-5 pb-4 sm:pb-5 pt-3 sm:pt-4 gap-3">
             {/* Search input */}
             <div className="relative flex items-center shrink-0">
               <Search className="w-4 h-4 text-[#9E9E9E] absolute left-4" />
@@ -371,7 +404,26 @@ export const SecondBrainModal: React.FC<SecondBrainModalProps> = ({ isOpen, onCl
 
             {/* Results area */}
             <div className="overflow-y-auto flex-1 min-h-0">
-              {!isSearchLoading && searchQuery.trim() && searchResults.length === 0 && (
+              {searchError && !isSearchLoading && (
+                <div
+                  role="alert"
+                  className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-700"
+                >
+                  <span className="flex items-start space-x-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span className="break-words">{searchError}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => runSearch(searchQuery, activeScope)}
+                    className="font-bold underline cursor-pointer shrink-0"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              {!isSearchLoading && !searchError && searchQuery.trim() && searchResults.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
                   <Layers className="w-8 h-8 text-[#DEDEDE]" />
                   <p className="text-sm text-[#9E9E9E]">
@@ -423,7 +475,7 @@ export const SecondBrainModal: React.FC<SecondBrainModalProps> = ({ isOpen, onCl
             </div>
 
             {/* Result count */}
-            {searchQuery.trim() && !isSearchLoading && searchResults.length > 0 && (
+            {searchQuery.trim() && !isSearchLoading && !searchError && searchResults.length > 0 && (
               <div className="shrink-0 pt-2 border-t border-[#EDEDED]">
                 <p className="text-[11px] text-[#9E9E9E]">
                   {searchTotal} result{searchTotal !== 1 ? "s" : ""}

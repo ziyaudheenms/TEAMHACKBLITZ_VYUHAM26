@@ -12,6 +12,15 @@ export interface AuthContext {
 export interface FullAuthContext extends AuthContext {
   organisationId: string | null;
   role: Role | null;
+  /** Display name from the auth profile (falls back to the email local part). */
+  name: string;
+}
+
+function displayNameOf(identity: Identity): string {
+  const meta = (identity.user.user_metadata ?? {}) as Record<string, unknown>;
+  const first = typeof meta.firstName === "string" ? meta.firstName : "";
+  const last = typeof meta.lastName === "string" ? meta.lastName : "";
+  return `${first} ${last}`.trim() || identity.email.split("@")[0] || "Member";
 }
 
 const ROLE_HIERARCHY: Record<Role, number> = {
@@ -48,6 +57,7 @@ export async function getFullAuthContext(c: Context): Promise<FullAuthContext | 
   if (!identity) return null;
 
   const { userId, email, isSuperAdmin } = identity;
+  const name = displayNameOf(identity);
   // The header only *selects* among organisations the user belongs to; it never grants access.
   const headerOrgId = c.req.header("X-Organisation-Id") ?? null;
   const serviceClient = getSupabaseServiceClient();
@@ -59,7 +69,7 @@ export async function getFullAuthContext(c: Context): Promise<FullAuthContext | 
       const { data } = await serviceClient.from("organisations").select("id").eq("id", headerOrgId).maybeSingle();
       organisationId = data?.id ?? null;
     }
-    return { userId, email, isSuperAdmin, organisationId, role: "owner" };
+    return { userId, email, isSuperAdmin, organisationId, role: "owner", name };
   }
 
   let query = serviceClient
@@ -79,6 +89,7 @@ export async function getFullAuthContext(c: Context): Promise<FullAuthContext | 
     isSuperAdmin,
     organisationId: (member?.organisation_id as string | undefined) ?? null,
     role: (member?.role as Role | undefined) ?? null,
+    name,
   };
 }
 

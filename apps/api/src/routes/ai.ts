@@ -72,7 +72,7 @@ const querySchema = z.object({
 // ─── Role → AI tool allow-list ────────────────────────────────────────────────
 // The agent acts with the *caller's* privileges. Read tools are open to every
 // member; write tools need member+; browser automation needs admin+.
-const READ_TOOLS = [
+export const READ_TOOLS = [
   "search_second_brain",
   "get_knowledge_page",
   "get_project_details",

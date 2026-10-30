@@ -18,6 +18,8 @@ import searchRoutes from "./routes/search";
 import agentsRoutes from "./routes/agents";
 import browserJobsRoutes from "./routes/browser-jobs";
 import adminRoutes from "./routes/admin";
+import invitationsRoutes from "./routes/invitations";
+import channelsRoutes from "./routes/channels";
 
 const app = new Hono();
 const v1 = new Hono();
@@ -80,6 +82,8 @@ v1.route("/analytics", analyticsRoutes);
 v1.route("/agents", agentsRoutes);
 v1.route("/browser-jobs", browserJobsRoutes);
 v1.route("/admin", adminRoutes);
+v1.route("/invitations", invitationsRoutes);
+v1.route("/channels", channelsRoutes);
 
 app.route("/api/v1", v1);
 

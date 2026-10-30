@@ -174,7 +174,7 @@ function formatTicket(row: Record<string, unknown>, comments: Array<Record<strin
     requesterId: row.requester_id as string,
     requesterName: (row.requester_name as string) || "Colleague",
     assigneeId: (row.assignee_id as string) ?? null,
-    assigneeName: (row.assignee_name as string) || (row.assignee_id ? "Assigned Lead" : undefined),
+    assigneeName: (row.assignee_name as string) || undefined,
     departmentId: (row.department_id as string) ?? null,
     slaTarget: slaTarget ? new Date(slaTarget).toISOString() : "In 24 hours",
     slaBreached,
@@ -192,6 +192,35 @@ function formatTicket(row: Record<string, unknown>, comments: Array<Record<strin
       createdAt: c.created_at as string,
     })),
   };
+}
+
+/** user_id -> display name from the organisation's people directory. */
+async function resolveNames(orgId: string, ids: Array<unknown>): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter((x): x is string => typeof x === "string" && x.length > 0))];
+  const out = new Map<string, string>();
+  if (unique.length === 0) return out;
+  const { data } = await getSupabaseServiceClient()
+    .from("employee_profiles")
+    .select("user_id, first_name, last_name")
+    .eq("organisation_id", orgId)
+    .in("user_id", unique);
+  for (const p of data ?? []) {
+    const name = `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim();
+    if (name) out.set(p.user_id as string, name);
+  }
+  return out;
+}
+
+function withNames(row: Record<string, unknown>, names: Map<string, string>): Record<string, unknown> {
+  return {
+    ...row,
+    requester_name: names.get(row.requester_id as string) ?? row.requester_name,
+    assignee_name: row.assignee_id ? names.get(row.assignee_id as string) : undefined,
+  };
+}
+
+async function named(orgId: string, row: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return withNames(row, await resolveNames(orgId, [row.requester_id, row.assignee_id]));
 }
 
 // ---------------------------------------------------------------------------
@@ -268,8 +297,12 @@ ticketsRoutes.get("/", async (c) => {
     }
   }
 
+  const names = await resolveNames(
+    ctx.organisationId,
+    (data ?? []).flatMap((t) => [t.requester_id, t.assignee_id])
+  );
   const formattedTickets = (data ?? []).map((row) =>
-    formatTicket(row, commentsByTicket[row.id as string] || [])
+    formatTicket(withNames(row, names), commentsByTicket[row.id as string] || [])
   );
 
   return c.json(formattedTickets, 200);
@@ -346,7 +379,10 @@ ticketsRoutes.post("/", async (c) => {
     metadata: { ticketNumber, title },
   });
 
-  const formatted = formatTicket({ ...ticket, requester_name: ctx.userName }, []);
+  const formatted = formatTicket(
+    { ...(await named(ctx.organisationId, ticket)), requester_name: ctx.userName },
+    []
+  );
   return c.json(formatted, 201);
 });
 
@@ -388,7 +424,7 @@ ticketsRoutes.get("/:id", async (c) => {
     action: "view",
   });
 
-  const formatted = formatTicket(ticket, comments ?? []);
+  const formatted = formatTicket(await named(ctx.organisationId, ticket), comments ?? []);
   return c.json(formatted, 200);
 });
 
@@ -473,7 +509,7 @@ ticketsRoutes.patch("/:id/status", async (c) => {
     .eq("ticket_id", id)
     .order("created_at", { ascending: true });
 
-  const formatted = formatTicket(updated, comments ?? []);
+  const formatted = formatTicket(await named(ctx.organisationId, updated), comments ?? []);
   return c.json(formatted, 200);
 });
 
@@ -558,7 +594,7 @@ ticketsRoutes.patch("/:id", async (c) => {
     .eq("ticket_id", id)
     .order("created_at", { ascending: true });
 
-  const formatted = formatTicket(updated, comments ?? []);
+  const formatted = formatTicket(await named(ctx.organisationId, updated), comments ?? []);
   return c.json(formatted, 200);
 });
 
@@ -639,7 +675,7 @@ ticketsRoutes.post("/:id/comments", async (c) => {
     .eq("id", id)
     .single();
 
-  const formatted = formatTicket(fullTicket ?? ticket, comments ?? []);
+  const formatted = formatTicket(await named(ctx.organisationId, fullTicket ?? ticket), comments ?? []);
   return c.json(formatted, 201);
 });
 

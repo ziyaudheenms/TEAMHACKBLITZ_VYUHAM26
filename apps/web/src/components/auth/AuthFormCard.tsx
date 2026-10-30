@@ -36,6 +36,12 @@ export const AuthFormCard: React.FC<AuthFormCardProps> = ({
     setMode(initialMode);
   }, [initialMode]);
 
+  // Arriving from an invitation: /login?email=… pre-fills the address.
+  useEffect(() => {
+    const email = new URLSearchParams(window.location.search).get("email");
+    if (email) setForm((prev) => (prev.email ? prev : { ...prev, email }));
+  }, []);
+
   const isRegister = mode === "register";
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -87,14 +87,14 @@ function OrbControl() {
 
   const active = status === "connected" || status === "connecting";
   return (
-    <div className="fixed bottom-6 right-6 z-[70] flex flex-col items-end gap-2">
-      {(error || (status === "error" && message)) && <p role="status" className="max-w-72 rounded-2xl bg-[#262626] px-4 py-3 text-sm leading-relaxed text-white shadow-xl">{error || message}</p>}
-      <button aria-label={active ? "End voice conversation" : "Start voice conversation"} aria-pressed={active} className={`live-orb group relative grid h-24 w-24 place-items-center rounded-full border border-white/20 shadow-[0_12px_35px_rgba(58,116,238,0.35)] transition-transform hover:scale-105 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#74D96F]/50 ${active ? "live-orb--active" : ""} ${isPressed ? "live-orb--pressed" : ""}`} onClick={toggleConversation}>
+    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[70] flex flex-col items-end gap-1.5 sm:gap-2">
+      {(error || (status === "error" && message)) && <p role="status" className="max-w-[80vw] sm:max-w-72 rounded-2xl bg-[#262626] px-3.5 py-2.5 sm:px-4 sm:py-3 text-xs sm:text-sm leading-relaxed text-white shadow-xl">{error || message}</p>}
+      <button aria-label={active ? "End voice conversation" : "Start voice conversation"} aria-pressed={active} className={`live-orb group relative grid h-16 w-16 sm:h-24 sm:w-24 place-items-center rounded-full border border-white/20 shadow-[0_12px_35px_rgba(58,116,238,0.35)] transition-transform hover:scale-105 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#74D96F]/50 ${active ? "live-orb--active" : ""} ${isPressed ? "live-orb--pressed" : ""}`} onClick={toggleConversation}>
         <span className="live-orb__glow" aria-hidden="true" />
         <span className="live-orb__ripple" aria-hidden="true" />
         <OrbEyes />
       </button>
-      <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#555] shadow-sm backdrop-blur"><Sparkles className="mr-1 inline h-3 w-3 text-[#56BE51]" />{label}</span>
+      <span className="rounded-full bg-white/90 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.12em] text-[#555] shadow-sm backdrop-blur"><Sparkles className="mr-1 inline h-2.5 w-2.5 sm:h-3 sm:w-3 text-[#56BE51]" />{label}</span>
     </div>
   );
 }

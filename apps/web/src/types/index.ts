@@ -169,6 +169,8 @@ export interface ChatMessage {
   isAi?: boolean;
   content: string;
   createdAt: string;
+  /** Sources the copilot used (AI replies only). */
+  sources?: Array<{ title: string; url?: string; type: string }>;
   reactions?: { emoji: string; count: number; users: string[] }[];
 }
 

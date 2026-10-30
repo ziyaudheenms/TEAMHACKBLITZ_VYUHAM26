@@ -376,6 +376,18 @@ notificationsRoutes.post("/", async (c) => {
 
   const supabase = getSupabaseServiceClient();
 
+  // The recipient must belong to the sender's organisation (no cross-tenant messaging).
+  const { data: recipientMembership } = await supabase
+    .from("organisation_members")
+    .select("id")
+    .eq("organisation_id", ctx.organisationId)
+    .eq("user_id", recipientId)
+    .is("left_at", null)
+    .maybeSingle();
+  if (!recipientMembership) {
+    return errorResponse(c, 404, "Recipient not found in this organisation");
+  }
+
   // Check recipient preferences
   const { data: prefs } = await supabase
     .from("notification_preferences")

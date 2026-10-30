@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { api, ApiStatus } from "../../services/api";
-import { Wifi, WifiOff, RefreshCw, Server, X } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, Server, X, CheckCircle2, AlertCircle } from "lucide-react";
 
 interface ApiStatusModalProps {
   isOpen: boolean;
@@ -17,7 +17,7 @@ export const ApiStatusModal: React.FC<ApiStatusModalProps> = ({ isOpen, onClose 
   });
   const [endpointInput, setEndpointInput] = useState(api.getBaseUrl());
   const [isChecking, setIsChecking] = useState(false);
-  const [testResult, setTestResult] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   useEffect(() => {
     const unsubscribe = api.subscribeStatus((newStatus) => {
@@ -30,20 +30,39 @@ export const ApiStatusModal: React.FC<ApiStatusModalProps> = ({ isOpen, onClose 
   if (!isOpen) return null;
 
   const handleTestConnection = async () => {
+    const url = endpointInput.trim();
+    if (!url) {
+      setTestResult({ ok: false, message: "Enter the API base URL first." });
+      return;
+    }
+    if (isChecking) return;
     setIsChecking(true);
     setTestResult(null);
-    api.setBaseUrl(endpointInput);
-    const isLive = await api.checkApiHealth();
-    setIsChecking(false);
-    if (isLive) {
-      setTestResult("Success: connected to the API.");
-    } else {
-      setTestResult("Could not reach the API at this address. Check the URL and that the server is running.");
+    try {
+      api.setBaseUrl(url);
+      const isLive = await api.checkApiHealth();
+      setTestResult(
+        isLive
+          ? { ok: true, message: "Connected to the API." }
+          : {
+              ok: false,
+              message: "Could not reach the API at this address. Check the URL and that the server is running.",
+            }
+      );
+    } catch (err) {
+      setTestResult({ ok: false, message: err instanceof Error && err.message ? err.message : "Connection test failed." });
+    } finally {
+      setIsChecking(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm p-4 animate-in fade-in">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="API connection"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm p-4 animate-in fade-in"
+    >
       <div className="w-full max-w-lg rounded-3xl border border-[#DEDEDE] bg-[#EDEDED] p-6 sm:p-8 shadow-2xl text-[#262626]">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-[#D6D6D6]">
@@ -58,6 +77,7 @@ export const ApiStatusModal: React.FC<ApiStatusModalProps> = ({ isOpen, onClose 
           </div>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="w-8 h-8 rounded-full bg-white border border-[#BEBEBE] text-[#262626] hover:bg-slate-50 flex items-center justify-center transition shadow-xs cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -87,14 +107,18 @@ export const ApiStatusModal: React.FC<ApiStatusModalProps> = ({ isOpen, onClose 
                 ? "The app is talking to the API server."
                 : "The API server can't be reached. Sign-in, people, departments and AI answers need it."}
             </p>
+            {status.lastChecked && (
+              <p className="text-[11px] text-[#9E9E9E] mt-1">Last checked {status.lastChecked}</p>
+            )}
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-[#262626] uppercase tracking-wider mb-1.5">
+            <label htmlFor="api-base-url" className="block text-xs font-bold text-[#262626] uppercase tracking-wider mb-1.5">
               API Base URL
             </label>
             <div className="flex space-x-2">
               <input
+                id="api-base-url"
                 type="text"
                 value={endpointInput}
                 onChange={(e) => setEndpointInput(e.target.value)}
@@ -114,12 +138,20 @@ export const ApiStatusModal: React.FC<ApiStatusModalProps> = ({ isOpen, onClose 
           </div>
 
           {testResult && (
-            <div className={`p-3 rounded-2xl text-xs flex items-start space-x-2 border ${
-              testResult.startsWith("Success")
-                ? "bg-[#74D96F]/20 border-[#56BE51]/40 text-[#1F541D]"
-                : "bg-rose-50 border-rose-200 text-rose-700"
-            }`}>
-              <span>{testResult}</span>
+            <div
+              role={testResult.ok ? "status" : "alert"}
+              className={`p-3 rounded-2xl text-xs flex items-start space-x-2 border ${
+                testResult.ok
+                  ? "bg-[#74D96F]/20 border-[#56BE51]/40 text-[#1F541D]"
+                  : "bg-rose-50 border-rose-200 text-rose-700"
+              }`}
+            >
+              {testResult.ok ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 shrink-0" />
+              )}
+              <span>{testResult.message}</span>
             </div>
           )}
         </div>

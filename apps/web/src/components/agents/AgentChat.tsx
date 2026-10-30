@@ -176,6 +176,12 @@ export default function AgentChat() {
 
   /* load + persist */
   useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+  }, []);
+
+  useEffect(() => {
     const uid = sessionStore.get()?.user.id ?? "anonymous";
     setUserId(uid);
     const loaded = loadConversations(uid);
@@ -486,7 +492,14 @@ export default function AgentChat() {
               >
                 <button
                   type="button"
-                  onClick={() => !isStreaming && setActiveId(c.id)}
+                  onClick={() => {
+                    if (!isStreaming) {
+                      setActiveId(c.id);
+                      if (typeof window !== "undefined" && window.innerWidth < 768) {
+                        setSidebarOpen(false);
+                      }
+                    }
+                  }}
                   className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left text-xs text-[#262626]"
                 >
                   {c.mode === "council" ? (

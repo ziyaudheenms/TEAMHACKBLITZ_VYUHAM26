@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import {
   Sparkles,
@@ -22,7 +22,7 @@ import {
   HardDrive,
 } from "lucide-react";
 import { api } from "../../services/api";
-import { sessionStore } from "../../services/http";
+import { sessionStore, ApiError } from "../../services/http";
 import type { Organisation } from "../../types";
 import { useRBAC } from "../../lib/useRBAC";
 
@@ -33,7 +33,10 @@ function AnimatedNumber({ target }: { target: number | string }) {
   const numericTarget = typeof target === "number" ? target : Number(target) || 0;
 
   useEffect(() => {
-    if (numericTarget === 0) return;
+    if (numericTarget === 0) {
+      setDisplay(0);
+      return;
+    }
     startRef.current = null;
     const step = (ts: number) => {
       if (!startRef.current) startRef.current = ts;
@@ -90,17 +93,37 @@ function greeting() {
 }
 
 /* ── Page ────────────────────────────────────────────────────────── */
+/** One overview figure: either loaded, or failed (so we never show a misleading 0). */
+type Slot<T> = { ok: true; value: T } | { ok: false; error: string };
+
 interface Overview {
-  organisations: Organisation[];
-  employeeCount: number;
-  departmentCount: number;
-  projectCount: number;
-  ticketCount: number;
+  organisations: Slot<Organisation[]>;
+  employees: Slot<number>;
+  departments: Slot<number>;
+  projects: Slot<number>;
+  tickets: Slot<number>;
 }
 
 interface Answer {
   answer: string;
-  sources: Array<{ title: string; category: string; snippet?: string; url?: string }>;
+  sources: Array<{ title: string; category: string; snippet?: string; link?: string }>;
+}
+
+function toSlot<T, U>(result: PromiseSettledResult<T>, map: (v: T) => U): Slot<U> {
+  if (result.status === "fulfilled") return { ok: true, value: map(result.value) };
+  const reason = result.reason;
+  return { ok: false, error: reason instanceof Error && reason.message ? reason.message : "Request failed" };
+}
+
+function aiErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 403) return `You don't have access to the AI assistant: ${err.message}`;
+    if (err.status === 502 || err.status === 503 || err.status === 504) {
+      return `The AI engine is unavailable right now. Try again in a moment. (${err.message})`;
+    }
+    return err.message;
+  }
+  return err instanceof Error ? err.message : "The AI engine did not respond.";
 }
 
 export default function DashboardPage() {
@@ -108,39 +131,45 @@ export default function DashboardPage() {
   const [firstName, setFirstName] = useState("");
   const [overview, setOverview] = useState<Overview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
-  const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   const [query, setQuery] = useState("");
   const [isAsking, setIsAsking] = useState(false);
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [askError, setAskError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const user = sessionStore.get()?.user;
-    setFirstName(user?.firstName || user?.email?.split("@")[0] || "");
+  const mounted = useRef(true);
 
+  const loadOverview = useCallback(async () => {
     setOverviewLoading(true);
-    Promise.all([
+    const [orgs, employees, departments, projects, tickets] = await Promise.allSettled([
       api.getOrganisations(),
       api.getEmployees(),
       api.getDepartments(),
-      api.getProjects().catch(() => []),
-      api.getTickets().catch(() => []),
-    ])
-      .then(([organisations, employees, departments, projects, tickets]) =>
-        setOverview({
-          organisations,
-          employeeCount: employees.length,
-          departmentCount: departments.length,
-          projectCount: projects.length,
-          ticketCount: tickets.filter((t) => t.status === "open" || t.status === "in_progress").length,
-        })
-      )
-      .catch((err) =>
-        setOverviewError(err instanceof Error ? err.message : "Failed to load overview")
-      )
-      .finally(() => setOverviewLoading(false));
+      api.getProjects(),
+      api.getTickets(),
+    ]);
+    if (!mounted.current) return;
+    setOverview({
+      organisations: toSlot(orgs, (v) => v),
+      employees: toSlot(employees, (v) => v.length),
+      departments: toSlot(departments, (v) => v.length),
+      projects: toSlot(projects, (v) => v.filter((p) => p.status === "active").length),
+      tickets: toSlot(tickets, (v) => v.filter((t) => t.status === "open" || t.status === "in_progress").length),
+    });
+    setOverviewLoading(false);
   }, []);
+
+  useEffect(() => {
+    mounted.current = true;
+    setHydrated(true);
+    const user = sessionStore.get()?.user;
+    setFirstName(user?.firstName || user?.email?.split("@")[0] || "");
+    void loadOverview();
+    return () => {
+      mounted.current = false;
+    };
+  }, [loadOverview]);
 
   const handleAsk = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,50 +181,48 @@ export default function DashboardPage() {
     try {
       setAnswer(await api.askSecondBrain(prompt));
     } catch (err) {
-      setAskError(err instanceof Error ? err.message : "The AI engine did not respond.");
+      setAskError(aiErrorMessage(err));
     } finally {
       setIsAsking(false);
     }
   };
 
-  const stats = [
+  type Stat = {
+    label: string;
+    /** null = failed to load (rendered as "–"). */
+    value: number | string | null;
+    error?: string;
+    icon: React.ElementType;
+    href: string;
+    accent: string;
+    isText?: boolean;
+  };
+
+  const numeric = (slot: Slot<number> | undefined): Pick<Stat, "value" | "error"> =>
+    !slot ? { value: null } : slot.ok ? { value: slot.value } : { value: null, error: slot.error };
+
+  const orgSlot = overview?.organisations;
+  const stats: Stat[] = [
     {
       label: "Organisation",
-      value: overview ? (overview.organisations[0]?.name ?? "—") : 0,
+      ...(!orgSlot
+        ? { value: null }
+        : orgSlot.ok
+        ? { value: orgSlot.value[0]?.name ?? "None yet" }
+        : { value: null, error: orgSlot.error }),
       icon: Building2,
       href: "/settings",
       accent: "#74D96F",
       isText: true,
     },
-    {
-      label: "People",
-      value: overview?.employeeCount ?? 0,
-      icon: Users,
-      href: "/directory",
-      accent: "#75A0C9",
-    },
-    {
-      label: "Departments",
-      value: overview?.departmentCount ?? 0,
-      icon: Network,
-      href: "/settings",
-      accent: "#F09363",
-    },
-    {
-      label: "Active projects",
-      value: overview?.projectCount ?? 0,
-      icon: FolderKanban,
-      href: "/projects",
-      accent: "#9b59b6",
-    },
-    {
-      label: "Open tickets",
-      value: overview?.ticketCount ?? 0,
-      icon: Ticket,
-      href: "/tickets",
-      accent: "#e74c3c",
-    },
+    { label: "People", ...numeric(overview?.employees), icon: Users, href: "/directory", accent: "#75A0C9" },
+    { label: "Departments", ...numeric(overview?.departments), icon: Network, href: "/settings", accent: "#F09363" },
+    { label: "Active projects", ...numeric(overview?.projects), icon: FolderKanban, href: "/projects", accent: "#9b59b6" },
+    { label: "Open tickets", ...numeric(overview?.tickets), icon: Ticket, href: "/tickets", accent: "#e74c3c" },
   ];
+
+  const failedStats = stats.filter((s) => s.error);
+  const allFailed = failedStats.length === stats.length;
 
   const quickActions = [
     { icon: BookOpen, label: "New page", href: "/knowledge", color: "#75A0C9" },
@@ -203,7 +230,7 @@ export default function DashboardPage() {
     { icon: FolderKanban, label: "New project", href: "/projects", color: "#9b59b6" },
     { icon: Ticket, label: "Raise ticket", href: "/tickets", color: "#e74c3c" },
     { icon: Video, label: "Log meeting", href: "/meetings", color: "#F09363" },
-    ...(canManageAgents
+    ...(hydrated && canManageAgents
       ? [{ icon: Bot, label: "Deploy agent", href: "/agents", color: "#74D96F" }]
       : []),
   ];
@@ -216,7 +243,7 @@ export default function DashboardPage() {
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#262626]">
             {greeting()}{firstName ? `, ${firstName}` : ""}
           </h1>
-          {role && role !== "guest" && (
+          {hydrated && role && role !== "guest" && (
             <span
               className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
                 role === "owner"
@@ -294,11 +321,22 @@ export default function DashboardPage() {
         )}
       </section>
 
-      {/* Error state */}
-      {overviewError && (
-        <div role="alert" className="flex items-start space-x-2 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-700 animate-slide-down">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>Couldn't load overview: {overviewError}</span>
+      {/* Error state: partial or total failure of the overview requests */}
+      {!overviewLoading && failedStats.length > 0 && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-700 animate-slide-down"
+        >
+          <span className="flex items-start space-x-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>
+              {allFailed ? "Couldn't load the overview" : `Couldn't load: ${failedStats.map((s) => s.label).join(", ")}`}
+              {" "}({failedStats[0].error}). A dash means the figure is unknown, not zero.
+            </span>
+          </span>
+          <button onClick={() => void loadOverview()} className="font-bold underline cursor-pointer shrink-0">
+            Retry
+          </button>
         </div>
       )}
 
@@ -306,7 +344,7 @@ export default function DashboardPage() {
       <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {overviewLoading
           ? Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)
-          : stats.map(({ label, value, icon: Icon, href, accent, isText }, idx) => (
+          : stats.map(({ label, value, error, icon: Icon, href, accent, isText }, idx) => (
               <Link
                 key={label}
                 href={href}
@@ -321,7 +359,9 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex items-end justify-between">
                   <span className="text-2xl font-extrabold text-[#262626] truncate">
-                    {isText ? (
+                    {value === null ? (
+                      <span aria-label="Unavailable" className="text-[#BEBEBE]">–</span>
+                    ) : isText ? (
                       <span className="text-base">{value}</span>
                     ) : (
                       <AnimatedNumber target={value as number} />
@@ -329,6 +369,11 @@ export default function DashboardPage() {
                   </span>
                   <ArrowRight className="w-4 h-4 text-[#BEBEBE] group-hover:text-[#56BE51] group-hover:translate-x-0.5 transition" />
                 </div>
+                {error && (
+                  <p className="text-[10px] text-rose-600 mt-1.5 truncate" title={error}>
+                    Couldn't load
+                  </p>
+                )}
               </Link>
             ))}
       </section>

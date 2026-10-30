@@ -4,6 +4,8 @@ import { AppShell } from "../components/layout/AppShell";
 import { LiveOrb } from "@/components/ui/live-orb";
 
 export const metadata: Metadata = {
+  // Invitation links carry a secret token in the URL; never leak it to third-party sites via Referer.
+  referrer: "same-origin",
   title: "BizContext AI | Minto Autonomous Operating Workspace",
   description:
     "A unified AI workspace that remembers what an organisation knows, coordinates teams, and acts with zero-friction browser-capable AI agents.",

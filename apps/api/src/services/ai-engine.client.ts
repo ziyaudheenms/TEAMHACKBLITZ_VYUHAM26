@@ -69,6 +69,8 @@ export class AIEngineClient {
     const res = await fetch(`${this.baseUrl}/api/v1/agent/run`, {
       method: "POST",
       headers,
+      // Never let a hung engine hold a request (or a background reply) open forever.
+      signal: AbortSignal.timeout(Number(process.env.AI_ENGINE_TIMEOUT_MS) || 90_000),
       body: JSON.stringify({
         prompt: payload.prompt,
         user_id: payload.userId,

@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import { CreateKnowledgePageSchema } from "@bizcontext/validation";
 import { getSupabaseServiceClient } from "../lib/supabase";
 import { getFullAuthContext, requireRole, writeAuditLog, type FullAuthContext } from "../lib/auth";
@@ -17,6 +18,23 @@ export interface KnowledgePageResponse {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  authorName?: string;
+}
+
+/** user_id -> display name, from the people directory of this organisation. */
+async function authorNames(orgId: string, userIds: Array<string | null>): Promise<Map<string, string>> {
+  const ids = [...new Set(userIds.filter((x): x is string => Boolean(x)))];
+  const out = new Map<string, string>();
+  if (ids.length === 0) return out;
+  const { data } = await getSupabaseServiceClient()
+    .from("employee_profiles")
+    .select("user_id, first_name, last_name")
+    .eq("organisation_id", orgId)
+    .in("user_id", ids);
+  for (const p of data ?? []) {
+    out.set(p.user_id as string, `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim());
+  }
+  return out;
 }
 
 function slugify(title: string): string {
@@ -124,9 +142,11 @@ knowledgeRoutes.get("/pages", async (c) => {
 
   if (error) return c.json({ error: { message: error.message } }, 500);
 
-  const pages = (data ?? [])
+  const visible = (data ?? [])
     .map((row) => toKnowledgePageResponse(row as Record<string, unknown>))
     .filter((p) => canReadPage(auth, p));
+  const names = await authorNames(auth.organisationId, visible.map((p) => p.createdBy));
+  const pages = visible.map((p) => ({ ...p, authorName: (p.createdBy && names.get(p.createdBy)) || "Unknown" }));
   return c.json({ pages }, 200);
 });
 
@@ -151,7 +171,71 @@ knowledgeRoutes.get("/pages/:id", async (c) => {
 
   const page = toKnowledgePageResponse(data as Record<string, unknown>);
   if (!canReadPage(auth, page)) return c.json({ error: { message: "Page not found" } }, 404);
-  return c.json(page, 200);
+  const names = await authorNames(auth.organisationId, [page.createdBy]);
+  return c.json({ ...page, authorName: (page.createdBy && names.get(page.createdBy)) || "Unknown" }, 200);
+});
+
+const UpdatePageSchema = z
+  .object({
+    title: z.string().trim().min(1).max(255).optional(),
+    content: z.string().max(100000).optional(),
+    visibility: z.enum(["public", "internal", "restricted"]).optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: "Nothing to update" });
+
+// PATCH /api/v1/knowledge/pages/:id — author or admin+
+knowledgeRoutes.patch("/pages/:id", async (c) => {
+  const auth = await getFullAuthContext(c);
+  if (!auth) return c.json({ error: { message: "Unauthorized" } }, 401);
+  if (!auth.organisationId || !requireRole(auth, "member")) {
+    return c.json({ error: { message: "Requires 'member' role" } }, 403);
+  }
+
+  const id = c.req.param("id");
+  const supabase = getSupabaseServiceClient();
+  const { data: existing } = await supabase
+    .from("pages")
+    .select("*")
+    .eq("id", id)
+    .eq("organisation_id", auth.organisationId)
+    .maybeSingle();
+  if (!existing) return c.json({ error: { message: "Page not found" } }, 404);
+
+  const current = toKnowledgePageResponse(existing as Record<string, unknown>);
+  if (!canReadPage(auth, current)) return c.json({ error: { message: "Page not found" } }, 404);
+  if (!requireRole(auth, "admin") && current.createdBy !== auth.userId) {
+    return c.json({ error: { message: "Only admins or the author can edit this page" } }, 403);
+  }
+
+  const parsed = UpdatePageSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: { message: "Validation failed" } }, 400);
+  if (parsed.data.visibility === "restricted" && !requireRole(auth, "admin")) {
+    return c.json({ error: { message: "Only admins can make a page restricted" } }, 403);
+  }
+
+  // The slug is intentionally stable so existing links and citations keep working.
+  const { data, error } = await supabase
+    .from("pages")
+    .update({ ...parsed.data, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("organisation_id", auth.organisationId)
+    .select()
+    .single();
+  if (error || !data) return c.json({ error: { message: "Could not update the page" } }, 500);
+
+  await writeAuditLog({
+    organisationId: auth.organisationId,
+    actorId: auth.userId,
+    action: "knowledge.update",
+    resourceType: "page",
+    resourceId: id,
+    metadata: { fields: Object.keys(parsed.data) },
+  });
+  const names = await authorNames(auth.organisationId, [current.createdBy]);
+  return c.json({
+    ...toKnowledgePageResponse(data as Record<string, unknown>),
+    authorName: (current.createdBy && names.get(current.createdBy)) || "Unknown",
+  });
 });
 
 // DELETE /api/v1/knowledge/pages/:id — admin+ or author

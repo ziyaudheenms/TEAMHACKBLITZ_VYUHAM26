@@ -26,6 +26,7 @@ import {
   Shield,
   ShieldCheck,
   ChevronRight,
+  X,
 } from "lucide-react";
 import { api, ApiStatus } from "../../services/api";
 import type { StoredSession } from "../../services/http";
@@ -80,7 +81,8 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
   const isAuthPage = pathname === "/login" || pathname === "/register";
   const isLandingPage = pathname === "/";
-  const isPublic = isAuthPage || isLandingPage;
+  const isInvitePage = pathname.startsWith("/invite/");
+  const isPublic = isAuthPage || isLandingPage || isInvitePage;
 
   const loadNotifications = useCallback(async () => {
     try {
@@ -212,15 +214,34 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#F8F9FA] text-[#262626]">
-      {/* ── Sidebar ───────────────────────────────────────────────────────── */}
+      {/* ── Mobile backdrop overlay ── */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-xs z-40 lg:hidden transition-opacity"
+          onClick={() => setIsSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* ── Sidebar (sliding drawer on mobile, collapsible aside on desktop) ── */}
       <aside
-        className={`flex flex-col border-r border-[#EDEDED] bg-white transition-all duration-300 z-30 ${
-          isSidebarOpen ? "w-64" : "w-[4.5rem]"
+        className={`fixed lg:static inset-y-0 left-0 z-50 flex flex-col border-r border-[#EDEDED] bg-white transition-all duration-300 shadow-2xl lg:shadow-none ${
+          isSidebarOpen
+            ? "translate-x-0 w-72 lg:w-64"
+            : "-translate-x-full lg:translate-x-0 lg:w-[4.5rem]"
         }`}
       >
         {/* Brand header */}
         <div className="flex items-center justify-between px-4 py-4 border-b border-[#EDEDED]">
-          <Link href="/dashboard" className="flex items-center space-x-3 group">
+          <Link
+            href="/dashboard"
+            onClick={() => {
+              if (typeof window !== "undefined" && window.innerWidth < 1024) {
+                setIsSidebarOpen(false);
+              }
+            }}
+            className="flex items-center space-x-3 group"
+          >
             <div className="w-8 h-8 rounded-xl bg-[#74D96F] flex items-center justify-center shadow-[0_2px_10px_rgba(116,217,111,0.35)] shrink-0 transition-transform group-hover:scale-105 animate-pulse-glow">
               <svg viewBox="0 0 24 24" className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="8" strokeOpacity="0.4" strokeWidth="2" />
@@ -234,9 +255,18 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
               </div>
             )}
           </Link>
+          {/* Close button on mobile */}
+          <button
+            onClick={() => setIsSidebarOpen(false)}
+            className="lg:hidden text-[#666666] hover:text-[#262626] p-1.5 rounded-lg hover:bg-[#EDEDED] transition cursor-pointer"
+            aria-label="Close sidebar"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          {/* Collapse/expand toggle on desktop */}
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="text-[#666666] hover:text-[#262626] p-1.5 rounded-lg hover:bg-[#EDEDED] transition cursor-pointer"
+            className="hidden lg:block text-[#666666] hover:text-[#262626] p-1.5 rounded-lg hover:bg-[#EDEDED] transition cursor-pointer"
             aria-label="Toggle sidebar"
           >
             <Menu className="w-4 h-4" />
@@ -273,6 +303,11 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                       <Link
                         key={item.href}
                         href={item.href}
+                        onClick={() => {
+                          if (typeof window !== "undefined" && window.innerWidth < 1024) {
+                            setIsSidebarOpen(false);
+                          }
+                        }}
                         className={`flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition-all group animate-slide-in-left stagger-${iIdx + 1} ${
                           isActive
                             ? "bg-[#74D96F]/15 text-[#1F541D] border border-[#74D96F]/30 font-bold shadow-xs"
@@ -342,21 +377,33 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
       {/* ── Main area ──────────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top navbar */}
-        <header className="h-14 border-b border-[#EDEDED] bg-white/90 backdrop-blur-md px-6 flex items-center justify-between shrink-0 z-20">
-          {/* Second Brain search bar */}
-          <button
-            onClick={() => setIsAiModalOpen(true)}
-            className="flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-[#EDEDED] hover:bg-[#E2E2E2] border border-[#D8D8D8] hover:border-[#BEBEBE] text-xs text-[#666666] hover:text-[#262626] transition w-full max-w-sm shadow-xs group cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[#56BE51] group-hover:scale-110 transition-transform" />
-            <span className="truncate">Ask your second brain...</span>
-            <kbd className="hidden sm:inline-block ml-auto text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full bg-white text-[#262626] border border-[#BEBEBE]">
-              ⌘K
-            </kbd>
-          </button>
+        <header className="h-14 border-b border-[#EDEDED] bg-white/90 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between shrink-0 z-20">
+          <div className="flex items-center space-x-2 flex-1 min-w-0 mr-2">
+            {/* Hamburger button for mobile */}
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(true)}
+              className="lg:hidden p-1.5 -ml-1 rounded-xl text-[#666666] hover:text-[#262626] hover:bg-[#EDEDED] transition cursor-pointer shrink-0"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            {/* Second Brain search bar */}
+            <button
+              onClick={() => setIsAiModalOpen(true)}
+              className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-[#EDEDED] hover:bg-[#E2E2E2] border border-[#D8D8D8] hover:border-[#BEBEBE] text-xs text-[#666666] hover:text-[#262626] transition w-full max-w-[200px] xs:max-w-xs sm:max-w-sm shadow-xs group cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-[#56BE51] group-hover:scale-110 transition-transform shrink-0" />
+              <span className="truncate">Ask second brain...</span>
+              <kbd className="hidden sm:inline-block ml-auto text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full bg-white text-[#262626] border border-[#BEBEBE]">
+                ⌘K
+              </kbd>
+            </button>
+          </div>
 
           {/* Right actions */}
-          <div className="flex items-center space-x-2 ml-3">
+          <div className="flex items-center space-x-2 shrink-0">
             {/* Notification bell */}
             <button
               onClick={() => router.push("/settings")}
@@ -403,7 +450,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-[#F8F9FA] page-enter">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-6 md:p-8 bg-[#F8F9FA] page-enter">
           {children}
         </main>
       </div>

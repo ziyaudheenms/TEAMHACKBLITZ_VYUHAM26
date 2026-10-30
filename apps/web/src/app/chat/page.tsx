@@ -11,6 +11,7 @@ import {
   Users,
   Plus,
   Loader2,
+  ArrowLeft,
 } from "lucide-react";
 import { api } from "../../services/api";
 import { sessionStore } from "../../services/http";
@@ -134,6 +135,7 @@ function TypingIndicator() {
 export default function ChatPage() {
   const [channels, setChannels] = useState<ChatChannel[]>([]);
   const [activeChannel, setActiveChannel] = useState<ChatChannel | null>(null);
+  const [mobileTab, setMobileTab] = useState<"channels" | "chat">("chat");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -283,9 +285,13 @@ export default function ChatPage() {
   );
 
   return (
-    <div className="flex h-[calc(100vh-6.5rem)] rounded-3xl border border-[#BEBEBE]/40 bg-white shadow-sm overflow-hidden animate-scale-in">
-      {/* Channels sidebar */}
-      <div className="w-64 border-r border-[#EDEDED] bg-[#F8F9FA] p-4 flex flex-col shrink-0">
+    <div className="flex h-[calc(100vh-5.5rem)] sm:h-[calc(100vh-6.5rem)] rounded-3xl border border-[#BEBEBE]/40 bg-white shadow-sm overflow-hidden animate-scale-in">
+      {/* Channels sidebar (full width on mobile when mobileTab === 'channels', w-64 on desktop) */}
+      <div
+        className={`${
+          mobileTab === "channels" ? "flex" : "hidden"
+        } md:flex w-full md:w-64 border-r border-[#EDEDED] bg-[#F8F9FA] p-3 sm:p-4 flex-col shrink-0`}
+      >
         <div className="flex items-center justify-between pb-3 mb-3 border-b border-[#EDEDED]">
           <div className="flex items-center space-x-2">
             <MessageSquare className="w-4 h-4 text-[#74D96F]" />
@@ -306,7 +312,10 @@ export default function ChatPage() {
             return (
               <button
                 key={ch.id}
-                onClick={() => setActiveChannel(ch)}
+                onClick={() => {
+                  setActiveChannel(ch);
+                  setMobileTab("chat");
+                }}
                 className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-between animate-slide-in-left stagger-${Math.min(i + 1, 8)} ${
                   isActive
                     ? "bg-[#EDEDED] text-[#262626] border border-[#BEBEBE]/40 shadow-xs"
@@ -332,7 +341,7 @@ export default function ChatPage() {
         </div>
 
         {/* AI hint */}
-        <div className="p-3.5 rounded-2xl bg-[#EDEDED] border border-[#BEBEBE]/40 text-[11px] text-[#262626] space-y-1 mt-3">
+        <div className="p-3 rounded-2xl bg-[#EDEDED] border border-[#BEBEBE]/40 text-[11px] text-[#262626] space-y-1 mt-3">
           <div className="flex items-center space-x-1.5 font-bold text-[#1F541D]">
             <Sparkles className="w-3.5 h-3.5 text-[#74D96F]" />
             <span>AI Copilot Active</span>
@@ -343,29 +352,43 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* Main chat area */}
-      <div className="flex-1 flex flex-col bg-white min-w-0">
+      {/* Main chat area (full width on mobile when mobileTab === 'chat', flex-1 on desktop) */}
+      <div
+        className={`${
+          mobileTab === "chat" ? "flex" : "hidden"
+        } md:flex flex-1 flex-col bg-white min-w-0`}
+      >
         {/* Channel header */}
         {activeChannel && (
-          <div className="h-14 px-6 border-b border-[#EDEDED] flex items-center justify-between shrink-0 bg-white">
-            <div className="flex items-center space-x-2">
+          <div className="h-14 px-3 sm:px-6 border-b border-[#EDEDED] flex items-center justify-between shrink-0 bg-white">
+            <div className="flex items-center space-x-2 min-w-0">
+              <button
+                type="button"
+                onClick={() => setMobileTab("channels")}
+                className="md:hidden p-1.5 -ml-1 rounded-xl text-[#666666] hover:text-[#262626] hover:bg-[#EDEDED] transition flex items-center space-x-1 shrink-0 cursor-pointer"
+                aria-label="Back to channels"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span className="text-xs font-bold">Channels</span>
+              </button>
               {activeChannel.isPrivate ? (
-                <Lock className="w-4 h-4 text-amber-500" />
+                <Lock className="w-4 h-4 text-amber-500 shrink-0" />
               ) : (
-                <Hash className="w-4 h-4 text-[#666666]" />
+                <Hash className="w-4 h-4 text-[#666666] shrink-0" />
               )}
-              <span className="font-bold text-sm text-[#262626]">{activeChannel.name}</span>
-              <span className="text-xs text-[#666666] hidden sm:inline">— {activeChannel.description}</span>
+              <span className="font-bold text-sm text-[#262626] truncate">{activeChannel.name}</span>
+              <span className="text-xs text-[#666666] hidden sm:inline truncate">— {activeChannel.description}</span>
             </div>
-            <div className="flex items-center space-x-1.5 text-xs text-[#666666]">
+            <div className="flex items-center space-x-1.5 text-xs text-[#666666] shrink-0 ml-2">
               <Users className="w-3.5 h-3.5" />
-              <span>{activeChannel.memberCount} members</span>
+              <span className="hidden xs:inline">{activeChannel.memberCount} members</span>
+              <span className="xs:hidden">{activeChannel.memberCount}</span>
             </div>
           </div>
         )}
 
         {/* Messages stream */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-4">
           {messages.map((m, idx) => (
             <div
               key={m.id}
@@ -452,7 +475,7 @@ export default function ChatPage() {
         </div>
 
         {/* Input area */}
-        <form onSubmit={handleSendMessage} className="p-4 border-t border-[#EDEDED] bg-white">
+        <form onSubmit={handleSendMessage} className="p-3 sm:p-4 border-t border-[#EDEDED] bg-white">
           <div className="flex items-center space-x-2 rounded-2xl border border-[#BEBEBE]/60 bg-[#F8F9FA] px-4 py-2.5 focus-within:border-[#74D96F] focus-within:bg-white transition">
             <input
               ref={inputRef}

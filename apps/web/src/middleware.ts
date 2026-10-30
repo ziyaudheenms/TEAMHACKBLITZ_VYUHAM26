@@ -11,7 +11,8 @@ export function middleware(request: NextRequest) {
   const isPublicPage =
     pathname === "/" ||
     pathname.startsWith("/login") ||
-    pathname.startsWith("/register");
+    pathname.startsWith("/register") ||
+    pathname.startsWith("/invite/"); // invited people aren't signed in yet
 
   // If user is already authenticated and visits /login or /register, redirect to /dashboard
   if (isAuthenticated && (pathname === "/login" || pathname === "/register")) {
