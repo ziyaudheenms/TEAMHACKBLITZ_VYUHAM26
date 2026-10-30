@@ -73,6 +73,11 @@ export interface StoredFile extends BaseEntity {
   visibility: "public" | "internal" | "restricted";
   uploadedByName: string;
   downloadUrl?: string;
+  ocrStatus?: "none" | "pending" | "processing" | "completed" | "failed";
+  summary?: string | null;
+  tags?: string[];
+  isUploadConfirmed?: boolean;
+  chunkCount?: number;
 }
 
 export interface Project extends BaseEntity {
@@ -286,6 +291,7 @@ export interface SearchResult {
   type: "employee" | "knowledge" | "project" | "ticket" | "meeting" | "file";
   title: string;
   subtitle?: string;
+  snippet?: string;
   url: string;
   matchScore?: number;
   createdAt?: string;

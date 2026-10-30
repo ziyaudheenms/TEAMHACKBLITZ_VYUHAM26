@@ -244,3 +244,41 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #9E9E9E;
 }
+
+/* Antigravity & Glassmorphic Innovations */
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
+.animate-float {
+  animation: floatSlow 4s ease-in-out infinite;
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.05);
+}
+
+.glass-floating-card {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(237, 237, 237, 0.9);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-floating-card:hover {
+  transform: translateY(-4px) scale(1.005);
+  box-shadow: 0 20px 40px -12px rgba(116, 217, 111, 0.12), 0 4px 12px rgba(0, 0, 0, 0.04);
+  border-color: rgba(116, 217, 111, 0.5);
+}
+
+.glow-brand {
+  box-shadow: 0 0 25px -4px rgba(116, 217, 111, 0.4);
+}
+

@@ -1166,7 +1166,7 @@ class ApiService {
     if (live) {
       this.files = [live, ...this.files];
       this.saveStore("files", this.files);
-      this.addAuditLog("Adhwaithas S.", "user", `Uploaded document "${filename}"`);
+      this.addAuditLog(this.actorName(), "user", `Uploaded document "${filename}"`);
       return live;
     }
 
@@ -1183,12 +1183,116 @@ class ApiService {
       visibility: "internal",
       uploadedByName: this.actorName(),
       downloadUrl: "#",
+      ocrStatus: "none",
     };
 
     this.files = [newFile, ...this.files];
     this.saveStore("files", this.files);
     this.addAuditLog(this.actorName(), "user", `Uploaded document "${filename}"`);
     return newFile;
+  }
+
+  public async uploadRealFile(file: File, folderPath = "/"): Promise<StoredFile> {
+    try {
+      // 1. Request presigned upload URL
+      const initRes = await this.request<{
+        data: {
+          fileId: string;
+          storagePath: string;
+          uploadUrl: string;
+          file: StoredFile;
+        };
+      }>("/files/upload-url", {
+        method: "POST",
+        body: JSON.stringify({
+          filename: file.name,
+          mimeType: file.type || "application/octet-stream",
+          byteSize: file.size,
+          visibility: "internal",
+          folderPath,
+        }),
+      });
+
+      if (initRes?.data?.uploadUrl) {
+        // 2. Upload file bytes to Supabase Storage via signed PUT URL
+        await fetch(initRes.data.uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+          body: file,
+        });
+
+        // 3. Confirm upload
+        await this.request(`/files/${initRes.data.fileId}/confirm`, {
+          method: "POST",
+          body: JSON.stringify({ storagePath: initRes.data.storagePath }),
+        });
+
+        const createdFile: StoredFile = {
+          ...initRes.data.file,
+          isUploadConfirmed: true,
+          ocrStatus: "processing",
+        };
+        this.files = [createdFile, ...this.files];
+        this.saveStore("files", this.files);
+        return createdFile;
+      }
+    } catch (err) {
+      console.warn("[api] Presigned upload failed, falling back to direct register:", err);
+    }
+
+    // Direct fallback
+    return this.uploadFile(file.name, file.type || "application/octet-stream", file.size);
+  }
+
+  public async getFileDownloadUrl(fileId: string): Promise<string | null> {
+    try {
+      const res = await this.request<{ data: { downloadUrl: string } }>(`/files/${fileId}/download-url`);
+      return res?.data?.downloadUrl ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  public async getFileKnowledge(fileId: string): Promise<{
+    file: StoredFile;
+    totalChunks: number;
+    chunks: Array<{ id: string; content: string; created_at: string }>;
+    fullText: string;
+  } | null> {
+    try {
+      const res = await this.request<{
+        data: {
+          file: StoredFile;
+          totalChunks: number;
+          chunks: Array<{ id: string; content: string; created_at: string }>;
+          fullText: string;
+        };
+      }>(`/files/${fileId}/content`);
+      return res?.data ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  public async reindexFile(fileId: string): Promise<{
+    status: string;
+    totalChunks: number;
+    summaryPreview: string;
+  } | null> {
+    try {
+      const res = await this.request<{
+        data: {
+          status: string;
+          totalChunks: number;
+          summaryPreview: string;
+        };
+      }>(`/files/${fileId}/reindex`, {
+        method: "POST",
+      });
+      return res?.data ?? null;
+    } catch {
+      return null;
+    }
   }
 
   // --- Audit Logs ---

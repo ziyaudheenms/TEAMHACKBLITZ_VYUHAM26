@@ -400,14 +400,18 @@ export const SecondBrainModal: React.FC<SecondBrainModalProps> = ({ isOpen, onCl
                       >
                         <ResultIcon type={result.type} />
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-semibold text-[#262626] truncate">
-                            {result.title}
+                          <div className="text-sm font-semibold text-[#262626] truncate flex items-center gap-2">
+                            <span>{result.title}</span>
                           </div>
-                          {result.subtitle && (
+                          {result.snippet ? (
+                            <div className="text-xs text-[#444444] line-clamp-2 mt-1 bg-white/80 p-2 rounded-lg border border-[#EDEDED] text-[11px] leading-relaxed">
+                              {result.snippet}
+                            </div>
+                          ) : result.subtitle ? (
                             <div className="text-xs text-[#9E9E9E] truncate mt-0.5">
                               {result.subtitle}
                             </div>
-                          )}
+                          ) : null}
                         </div>
                         <TypeBadge type={result.type} />
                         <ArrowRight className="w-3.5 h-3.5 text-[#BEBEBE] opacity-0 group-hover:opacity-100 transition shrink-0" />

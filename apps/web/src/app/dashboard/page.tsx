@@ -19,6 +19,7 @@ import {
   TrendingUp,
   Shield,
   Zap,
+  HardDrive,
 } from "lucide-react";
 import { api } from "../../services/api";
 import { sessionStore } from "../../services/http";
@@ -198,6 +199,7 @@ export default function DashboardPage() {
 
   const quickActions = [
     { icon: BookOpen, label: "New page", href: "/knowledge", color: "#75A0C9" },
+    { icon: HardDrive, label: "Asset storage", href: "/storage", color: "#56BE51" },
     { icon: FolderKanban, label: "New project", href: "/projects", color: "#9b59b6" },
     { icon: Ticket, label: "Raise ticket", href: "/tickets", color: "#e74c3c" },
     { icon: Video, label: "Log meeting", href: "/meetings", color: "#F09363" },
