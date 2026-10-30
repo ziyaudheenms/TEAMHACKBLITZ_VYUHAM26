@@ -142,8 +142,8 @@ export default function KnowledgeBasePage() {
 
   const filteredPages = pages.filter(
     (p) =>
-      p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()))
+      p.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p.tags || []).some((t) => t?.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -303,16 +303,18 @@ export default function KnowledgeBasePage() {
             )}
 
             {/* Tags */}
-            <div className="flex flex-wrap gap-1.5">
-              {selectedPage.tags.map((tag, i) => (
-                <span
-                  key={i}
-                  className="text-[10px] px-2.5 py-0.5 rounded-full bg-[#EDEDED] text-[#262626] font-mono border border-[#BEBEBE]/40"
-                >
-                  #{tag}
-                </span>
-              ))}
-            </div>
+            {selectedPage.tags && selectedPage.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {selectedPage.tags.map((tag, i) => (
+                  <span
+                    key={i}
+                    className="text-[10px] px-2.5 py-0.5 rounded-full bg-[#EDEDED] text-[#262626] font-mono border border-[#BEBEBE]/40"
+                  >
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )}
 
             {/* Document Body / Markdown Editor with Always-Preview */}
             {isEditing ? (

@@ -410,8 +410,15 @@ class ApiService {
   // --- Knowledge Workspace ---
   public async getKnowledgePages(): Promise<KnowledgePage[]> {
     const live = await this.request<{ pages?: KnowledgePage[] } | KnowledgePage[]>("/knowledge/pages");
-    const pages = Array.isArray(live) ? live : live?.pages ?? this.knowledgePages;
-    if (pages) {
+    const rawPages = Array.isArray(live) ? live : live?.pages ?? this.knowledgePages;
+    const pages = (rawPages || []).map((p: KnowledgePage) => ({
+      ...p,
+      tags: Array.isArray(p.tags) ? p.tags : ["documentation"],
+      authorName: p.authorName || "Team Member",
+      summary: p.summary || "",
+      viewsCount: p.viewsCount ?? 1,
+    }));
+    if (pages.length > 0) {
       this.knowledgePages = pages;
     }
     return pages;
@@ -419,8 +426,13 @@ class ApiService {
 
   public async getKnowledgePage(id: string): Promise<KnowledgePage | undefined> {
     const live = await this.request<KnowledgePage>(`/knowledge/pages/${id}`);
-    if (live) return live;
-    return this.knowledgePages.find((p) => p.id === id);
+    const page = live || this.knowledgePages.find((p) => p.id === id);
+    if (!page) return undefined;
+    return {
+      ...page,
+      tags: Array.isArray(page.tags) ? page.tags : ["documentation"],
+      authorName: page.authorName || "Team Member",
+    };
   }
 
   public async createKnowledgePage(data: Partial<KnowledgePage>): Promise<KnowledgePage> {
