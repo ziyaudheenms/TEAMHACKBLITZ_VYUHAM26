@@ -280,3 +280,36 @@ export interface NotificationPreferences {
   dailyDigest: boolean;
   updatedAt: string;
 }
+
+export interface SearchResult {
+  id: string;
+  type: "employee" | "knowledge" | "project" | "ticket" | "meeting" | "file";
+  title: string;
+  subtitle?: string;
+  url: string;
+  matchScore?: number;
+  createdAt?: string;
+}
+
+export interface GlobalSearchResponse {
+  results: SearchResult[];
+  totalCount: number;
+  query: string;
+  scope: string;
+}
+
+export interface SecondBrainResponse {
+  answer: string;
+  sources: Array<{
+    title: string;
+    category: string;
+    matchConfidence?: number;
+    link?: string;
+    snippet?: string;
+  }>;
+  suggestedActions?: Array<{
+    label: string;
+    actionType: string;
+    payload: string;
+  }>;
+}

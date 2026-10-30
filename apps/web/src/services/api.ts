@@ -15,6 +15,9 @@ import {
   AuditLogItem,
   AppNotification,
   NotificationPreferences,
+  SearchResult,
+  GlobalSearchResponse,
+  SecondBrainResponse,
 } from "../types";
 
 import {
@@ -1067,13 +1070,146 @@ class ApiService {
   }
 
   // --- Second Brain (AI engine via API gateway) ---
+  public async searchGlobal(
+    query: string,
+    scope: string = "all"
+  ): Promise<GlobalSearchResponse> {
+    const encoded = encodeURIComponent(query);
+    const live = await this.request<GlobalSearchResponse>(
+      `/search?q=${encoded}&scope=${scope}`
+    );
+    if (live) return live;
+
+    // Offline mock: search through local state
+    const q = query.toLowerCase();
+    const results: SearchResult[] = [];
+
+    if (scope === "all" || scope === "employees") {
+      this.employees
+        .filter(
+          (e) =>
+            `${e.firstName} ${e.lastName}`.toLowerCase().includes(q) ||
+            e.workEmail.toLowerCase().includes(q) ||
+            e.designation?.toLowerCase().includes(q)
+        )
+        .slice(0, 5)
+        .forEach((e) =>
+          results.push({
+            id: e.id,
+            type: "employee",
+            title: `${e.firstName} ${e.lastName}`,
+            subtitle: e.designation || e.workEmail,
+            url: "/directory",
+            createdAt: e.createdAt,
+          })
+        );
+    }
+
+    if (scope === "all" || scope === "knowledge") {
+      this.knowledgePages
+        .filter(
+          (p) =>
+            p.title.toLowerCase().includes(q) ||
+            p.content.toLowerCase().includes(q) ||
+            p.tags.some((t) => t.toLowerCase().includes(q))
+        )
+        .slice(0, 5)
+        .forEach((p) =>
+          results.push({
+            id: p.id,
+            type: "knowledge",
+            title: p.title,
+            subtitle: p.summary,
+            url: "/knowledge",
+            createdAt: p.createdAt,
+          })
+        );
+    }
+
+    if (scope === "all" || scope === "projects") {
+      this.projects
+        .filter(
+          (p) =>
+            p.name.toLowerCase().includes(q) ||
+            p.description?.toLowerCase().includes(q)
+        )
+        .slice(0, 5)
+        .forEach((p) =>
+          results.push({
+            id: p.id,
+            type: "project",
+            title: p.name,
+            subtitle: p.departmentName,
+            url: "/projects",
+            createdAt: p.createdAt,
+          })
+        );
+    }
+
+    if (scope === "all" || scope === "tickets") {
+      this.tickets
+        .filter(
+          (t) =>
+            t.title.toLowerCase().includes(q) ||
+            t.description.toLowerCase().includes(q) ||
+            t.ticketNumber.toLowerCase().includes(q)
+        )
+        .slice(0, 5)
+        .forEach((t) =>
+          results.push({
+            id: t.id,
+            type: "ticket",
+            title: t.title,
+            subtitle: `${t.ticketNumber} · ${t.status}`,
+            url: "/tickets",
+            createdAt: t.createdAt,
+          })
+        );
+    }
+
+    if (scope === "all" || scope === "meetings") {
+      this.meetings
+        .filter(
+          (m) =>
+            m.title.toLowerCase().includes(q) ||
+            m.agenda?.toLowerCase().includes(q)
+        )
+        .slice(0, 5)
+        .forEach((m) =>
+          results.push({
+            id: m.id,
+            type: "meeting",
+            title: m.title,
+            subtitle: m.meetingDate,
+            url: "/meetings",
+            createdAt: m.createdAt,
+          })
+        );
+    }
+
+    if (scope === "all" || scope === "files") {
+      this.files
+        .filter((f) => f.filename.toLowerCase().includes(q))
+        .slice(0, 5)
+        .forEach((f) =>
+          results.push({
+            id: f.id,
+            type: "file",
+            title: f.filename,
+            subtitle: f.mimeType,
+            url: "/storage",
+            createdAt: f.createdAt,
+          })
+        );
+    }
+
+    return { results, totalCount: results.length, query, scope };
+  }
+
   public async askSecondBrain(
     prompt: string,
     chatHistory: Array<{ role: "user" | "assistant"; content: string }> = []
-  ): Promise<{
-    answer: string;
-    sources: Array<{ title: string; category: string; snippet?: string; url?: string }>;
-  }> {
+  ): Promise<SecondBrainResponse> {
     const res = await http<{
       response: string;
       citations?: Array<{ title: string; source_type: string; snippet?: string; url?: string }>;
@@ -1087,7 +1223,7 @@ class ApiService {
         title: c.title,
         category: c.source_type,
         snippet: c.snippet,
-        url: c.url,
+        link: c.url,
       })),
     };
   }
