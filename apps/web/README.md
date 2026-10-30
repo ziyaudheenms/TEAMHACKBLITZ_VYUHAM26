@@ -67,7 +67,7 @@ This application implements the full frontend specification defined in `IMPLEMEN
 ## Backend API Connection & Resilient Fallback
 
 The frontend includes a typed, unified API client (`src/services/api.ts`):
-- Targets `http://localhost:3001/api/v1` (or `process.env.NEXT_PUBLIC_API_URL`).
+- Targets same-origin `/api/v1` on Vercel (or `process.env.NEXT_PUBLIC_API_URL` for an override).
 - **Resilient Fallback Mode**: When the backend server is offline or being developed, the app seamlessly uses an interactive seed store with `localStorage` persistence.
 - **Connection Indicator**: The top navigation bar displays a live indicator (🟢 Live Connected / 🟡 Demo Mode) with one-click ping testing.
 

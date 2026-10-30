@@ -13,7 +13,7 @@ import { sessionStore } from "@/services/http";
 const apiBaseUrl = () =>
   (typeof window !== "undefined" && localStorage.getItem("bizcontext_api_url")) ||
   process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:3001/api/v1";
+  "/api/v1";
 
 const requestHeaders = () => {
   const session = sessionStore.get();

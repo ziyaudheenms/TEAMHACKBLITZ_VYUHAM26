@@ -501,7 +501,7 @@ export default function SettingsPage() {
               <input
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
-                placeholder="http://localhost:3001/api/v1"
+                placeholder="/api/v1"
                 className={`${fieldClass} font-mono`}
               />
               <button

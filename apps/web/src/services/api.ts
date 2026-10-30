@@ -162,7 +162,9 @@ class ApiService {
     this.baseUrl =
       typeof window !== "undefined" && localStorage.getItem("bizcontext_api_url")
         ? localStorage.getItem("bizcontext_api_url")!
-        : process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
+        : process.env.NEXT_PUBLIC_API_URL || "/api/v1";
+
+    this.initStore();
   }
 
   // --- Connection status ---------------------------------------------------------

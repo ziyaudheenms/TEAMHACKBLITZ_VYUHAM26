@@ -30,6 +30,8 @@ export interface IngestionResult {
 
 export class FileIngestionService {
   private getAiEngineUrl(): string {
+    // AI_ENGINE_URL is injected by Vercel via the service binding on the "api"
+    // service. In local dev it falls back to the port set in apps/api/.env.
     return (process.env.AI_ENGINE_URL || "http://localhost:8000").replace(/\/+$/, "");
   }
 

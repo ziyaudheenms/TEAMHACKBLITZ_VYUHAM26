@@ -122,7 +122,7 @@ export const ApiStatusModal: React.FC<ApiStatusModalProps> = ({ isOpen, onClose 
                 type="text"
                 value={endpointInput}
                 onChange={(e) => setEndpointInput(e.target.value)}
-                placeholder="http://localhost:3001/api/v1"
+                placeholder="/api/v1"
                 className="flex-1 rounded-2xl border border-[#BEBEBE] bg-white px-3.5 py-2.5 text-sm text-[#262626] focus:border-[#75A0C9] focus:outline-none focus:ring-2 focus:ring-[#75A0C9]/20"
               />
               <button
@@ -134,7 +134,7 @@ export const ApiStatusModal: React.FC<ApiStatusModalProps> = ({ isOpen, onClose 
                 Test connection
               </button>
             </div>
-            <p className="text-[11px] text-[#666666] mt-1 font-mono">Default: http://localhost:3001/api/v1</p>
+            <p className="text-[11px] text-[#666666] mt-1 font-mono">Default: /api/v1</p>
           </div>
 
           {testResult && (

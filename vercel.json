@@ -1,0 +1,48 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "ai-engine": {
+      "root": "apps/ai-engine",
+      "framework": "fastapi",
+      "entrypoint": "app.main:app",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "api",
+          "format": "url",
+          "env": "BACKEND_API_BASE_URL"
+        }
+      ]
+    },
+    "api": {
+      "root": "apps/api",
+      "framework": "hono",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "ai-engine",
+          "format": "url",
+          "env": "AI_ENGINE_URL"
+        }
+      ]
+    },
+    "web": {
+      "root": "apps/web",
+      "framework": "nextjs"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "api"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "web"
+      }
+    }
+  ]
+}
