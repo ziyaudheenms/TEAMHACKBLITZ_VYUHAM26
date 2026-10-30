@@ -42,12 +42,14 @@ import {
   resolveMembership,
   getSupabaseServiceClient,
 } from "../lib/supabase";
+import { fileIngestionService } from "../services/file-ingestion.service";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const STORAGE_BUCKET = process.env.STORAGE_ASSETS_BUCKET || "assets";
+const STORAGE_BUCKET =
+  process.env.STORAGE_ASSETS_BUCKET || process.env.STORAGE_BUCKET || "bizcontext-assets";
 
 /** Strict allowlist for uploaded assets */
 const ALLOWED_MIME_TYPES = new Set([
@@ -445,6 +447,11 @@ filesRoutes.post("/", async (c) => {
     metadata: { filename, byteSize },
   });
 
+  // Automatically trigger document ingestion and knowledge chunking in background
+  fileIngestionService
+    .ingestFile(file.id as string, ctx.organisationId)
+    .catch((err) => console.error(`[files] Background ingestion failed for ${file.id}:`, err?.message));
+
   const responseFile = {
     id: file.id as string,
     organisationId: file.organisation_id as string,
@@ -536,7 +543,94 @@ filesRoutes.post("/:fileId/confirm", async (c) => {
     action: "confirm_upload",
   });
 
+  // Automatically trigger document ingestion and knowledge chunking in background
+  fileIngestionService
+    .ingestFile(fileId, ctx.organisationId)
+    .catch((err) => console.error(`[files] Background ingestion failed for confirmed file ${fileId}:`, err?.message));
+
   return c.json({ data: updated }, 200);
+});
+
+// ---------------------------------------------------------------------------
+// POST /:fileId/reindex — trigger/re-run knowledge extraction & chunking
+// ---------------------------------------------------------------------------
+filesRoutes.post("/:fileId/reindex", async (c) => {
+  const auth = await resolveUserContext(c);
+  if (!auth.ok) return auth.response;
+  const ctx = auth.context;
+
+  const { fileId } = c.req.param();
+  const supabase = getSupabaseServiceClient();
+
+  const { data: file, error: fetchErr } = await supabase
+    .from("files")
+    .select("id, organisation_id, created_by, is_upload_confirmed, filename")
+    .eq("id", fileId)
+    .eq("organisation_id", ctx.organisationId)
+    .is("deleted_at", null)
+    .single();
+
+  if (fetchErr || !file) {
+    return errorResponse(c, 404, "File not found");
+  }
+
+  if (!canAdminister(ctx.role) && file.created_by !== ctx.userId) {
+    const hasAccess = await checkExplicitPermission(fileId, ctx.userId, "edit");
+    if (!hasAccess) {
+      return errorResponse(c, 403, "Access denied to reindex file");
+    }
+  }
+
+  const result = await fileIngestionService.ingestFile(fileId, ctx.organisationId);
+
+  await writeAuditLog({
+    organisationId: ctx.organisationId,
+    actorId: ctx.userId,
+    resourceType: "file",
+    resourceId: fileId,
+    action: "reindex",
+    metadata: { filename: file.filename, chunks: result.totalChunks },
+  });
+
+  return c.json({ data: result }, 200);
+});
+
+// ---------------------------------------------------------------------------
+// GET /:fileId/content — retrieve extracted text and knowledge chunks
+// ---------------------------------------------------------------------------
+filesRoutes.get("/:fileId/content", async (c) => {
+  const auth = await resolveUserContext(c);
+  if (!auth.ok) return auth.response;
+  const ctx = auth.context;
+
+  const { fileId } = c.req.param();
+  const supabase = getSupabaseServiceClient();
+
+  const { data: file, error: fetchErr } = await supabase
+    .from("files")
+    .select("id, organisation_id, created_by, visibility, filename")
+    .eq("id", fileId)
+    .eq("organisation_id", ctx.organisationId)
+    .is("deleted_at", null)
+    .single();
+
+  if (fetchErr || !file) {
+    return errorResponse(c, 404, "File not found");
+  }
+
+  if (file.visibility === "restricted" && !canAdminister(ctx.role) && file.created_by !== ctx.userId) {
+    const hasAccess = await checkExplicitPermission(fileId, ctx.userId, "view");
+    if (!hasAccess) {
+      return errorResponse(c, 403, "Access denied to restricted file");
+    }
+  }
+
+  const knowledge = await fileIngestionService.getFileKnowledge(fileId, ctx.organisationId);
+  if (!knowledge) {
+    return errorResponse(c, 404, "File content has not been extracted or indexed yet");
+  }
+
+  return c.json({ data: knowledge }, 200);
 });
 
 // ---------------------------------------------------------------------------

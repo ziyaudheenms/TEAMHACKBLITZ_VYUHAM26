@@ -87,6 +87,43 @@ async def get_knowledge_page(
     return result
 
 
+async def get_file_content(
+    ctx: RunContext[HarnessContext],
+    file_id: str,
+) -> Dict[str, Any]:
+    """Retrieves full text content, metadata, and extracted knowledge chunks of a stored document/file.
+    
+    Args:
+        ctx: RunContext containing execution context and backend client.
+        file_id: UUID of the file asset stored in the organisation's Second Brain.
+    """
+    if not ctx.deps.is_tool_allowed("get_file_content"):
+        return {"error": "Permission denied: 'get_file_content' is not authorized."}
+
+    logger.info("Fetching file content for file_id=%s", file_id)
+    result = await ctx.deps.backend_client.get_file_content(
+        file_id=file_id,
+        token=ctx.deps.auth_token,
+        org_id=ctx.deps.organisation_id,
+        user_id=ctx.deps.user_id,
+    )
+
+    if isinstance(result, dict) and "data" in result and isinstance(result["data"], dict):
+        file_data = result["data"].get("file", {})
+        filename = file_data.get("filename", f"File {file_id}")
+        full_text = result["data"].get("fullText", "")
+        ctx.deps.add_citation(
+            source_id=str(file_data.get("id", file_id)),
+            title=str(filename),
+            source_type="file",
+            url=f"/storage?fileId={file_id}",
+            snippet=full_text[:200] if full_text else str(file_data.get("summary", "")),
+        )
+
+    ctx.deps.record_tool_call("get_file_content", {"file_id": file_id}, result)
+    return result
+
+
 async def get_project_details(
     ctx: RunContext[HarnessContext],
     project_id: str,
@@ -360,6 +397,7 @@ async def call_backend_tool(
 ALL_HARNESS_TOOLS = [
     search_second_brain,
     get_knowledge_page,
+    get_file_content,
     get_project_details,
     get_meeting_minutes,
     search_employee_directory,

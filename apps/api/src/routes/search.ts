@@ -244,27 +244,84 @@ searchRoutes.get("/", async (c) => {
 
   if (want("files")) {
     tasks.push(
-      supabase
-        .from("files")
-        .select("id, filename, mime_type, visibility, created_at")
-        .eq("organisation_id", orgId)
-        .is("deleted_at", null)
-        .ilike("filename", like)
-        .limit(limit)
-        .then(({ data }) => {
-          for (const r of data ?? []) {
-            // Restricted files are not discoverable by non-admins.
-            if (r.visibility === "restricted" && !requireRole(auth, "admin")) continue;
+      (async () => {
+        // 1. Deep content search across indexed knowledge_chunks for files
+        const { data: chunksData } = await supabase
+          .from("knowledge_chunks")
+          .select("id, source_id, content, created_at")
+          .eq("organisation_id", orgId)
+          .eq("source_type", "file")
+          .ilike("content", like)
+          .limit(limit);
+
+        const seenFileIds = new Set<string>();
+
+        if (chunksData && chunksData.length > 0) {
+          const fileIds = [...new Set(chunksData.map((c) => c.source_id))];
+          const { data: matchedFiles } = await supabase
+            .from("files")
+            .select("id, filename, mime_type, visibility, created_by, created_at")
+            .eq("organisation_id", orgId)
+            .in("id", fileIds)
+            .is("deleted_at", null);
+
+          const fileMap = new Map((matchedFiles ?? []).map((f) => [f.id, f]));
+
+          for (const chunk of chunksData) {
+            const parentFile = fileMap.get(chunk.source_id);
+            if (!parentFile) continue;
+            // Restricted files check
+            if (
+              parentFile.visibility === "restricted" &&
+              !requireRole(auth, "admin") &&
+              parentFile.created_by !== auth.userId
+            ) {
+              continue;
+            }
+
+            seenFileIds.add(parentFile.id);
             results.push({
-              id: r.id,
+              id: parentFile.id,
               type: "file",
-              title: r.filename,
-              subtitle: r.mime_type,
-              url: "/storage",
-              createdAt: r.created_at,
+              title: parentFile.filename,
+              subtitle: parentFile.mime_type,
+              snippet: snippetOf(chunk.content, q) || chunk.content.slice(0, 200),
+              url: `/storage?fileId=${parentFile.id}`,
+              createdAt: chunk.created_at || parentFile.created_at,
             });
           }
-        })
+        }
+
+        // 2. Metadata / filename search on files table
+        const remainingLimit = Math.max(1, limit - results.filter((r) => r.type === "file").length);
+        const { data: filesData } = await supabase
+          .from("files")
+          .select("id, filename, mime_type, visibility, summary, created_by, created_at")
+          .eq("organisation_id", orgId)
+          .is("deleted_at", null)
+          .or(`filename.ilike.${like},summary.ilike.${like},ocr_text.ilike.${like}`)
+          .limit(remainingLimit);
+
+        for (const r of filesData ?? []) {
+          if (seenFileIds.has(r.id)) continue;
+          if (
+            r.visibility === "restricted" &&
+            !requireRole(auth, "admin") &&
+            r.created_by !== auth.userId
+          ) {
+            continue;
+          }
+          results.push({
+            id: r.id,
+            type: "file",
+            title: r.filename,
+            subtitle: r.mime_type,
+            snippet: snippetOf(r.summary, q) || r.summary || `File document: ${r.filename}`,
+            url: `/storage?fileId=${r.id}`,
+            createdAt: r.created_at,
+          });
+        }
+      })()
     );
   }
 

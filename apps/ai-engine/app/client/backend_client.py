@@ -118,6 +118,25 @@ class BackendClient:
             logger.warning("Failed to fetch knowledge page %s: %s", page_id_or_slug, exc)
             return {"error": f"Backend request error: {str(exc)}"}
 
+    async def get_file_content(
+        self,
+        file_id: str,
+        token: Optional[str] = None,
+        org_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Fetches the extracted content, summary, and knowledge chunks of a stored asset file."""
+        client = await self.get_client()
+        headers = self._build_headers(token=token, org_id=org_id, user_id=user_id)
+        try:
+            response = await client.get(f"/api/v1/files/{file_id}/content", headers=headers)
+            if response.status_code == 200:
+                return response.json()
+            return {"error": f"File content for '{file_id}' not found (status {response.status_code})"}
+        except httpx.RequestError as exc:
+            logger.warning("Failed to fetch file content %s: %s", file_id, exc)
+            return {"error": f"Backend request error: {str(exc)}"}
+
     async def get_project_context(
         self,
         project_id: str,

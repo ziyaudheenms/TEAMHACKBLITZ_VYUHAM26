@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 
 from app.api.routes import router as api_router
+from app.api.extract_routes import router as extract_router
 from app.client.backend_client import backend_client_instance
 from app.config import settings
 
@@ -66,6 +67,7 @@ app.add_middleware(
 
 # Register API routes
 app.include_router(api_router)
+app.include_router(extract_router)
 
 
 @app.get("/", tags=["Discovery"])
