@@ -660,20 +660,120 @@ class ApiService {
 
   // --- Meetings & Minutes (AI Action Items - Section 10.1) ---
   public async getMeetings(): Promise<Meeting[]> {
-    const live = await this.request<Meeting[]>("/meetings");
-    return live || this.meetings;
+    const live = await this.request<Meeting[] | { data: Meeting[] }>("/meetings");
+    const list = live ? (Array.isArray(live) ? live : (live as any).data) : null;
+    if (list && Array.isArray(list)) {
+      this.meetings = list;
+      this.saveStore("meetings", this.meetings);
+      return list;
+    }
+    return this.meetings;
   }
 
-  public async extractActionItems(meetingId: string): Promise<Meeting> {
-    const live = await this.request<Meeting>(`/meetings/${meetingId}/extract-action-items`, {
-      method: "POST",
-    });
+  public async getMeeting(meetingId: string): Promise<Meeting | undefined> {
+    const live = await this.request<Meeting>(`/meetings/${meetingId}`);
     if (live) return live;
+    return this.meetings.find((m) => m.id === meetingId);
+  }
+
+  public async createMeeting(data: Partial<Meeting>): Promise<Meeting> {
+    const session = sessionStore.get();
+    const newMeeting: Meeting = {
+      id: `meet-${Date.now()}`,
+      organisationId: session?.organisationId || "org-1",
+      createdBy: session?.user?.id || "emp-1",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      title: data.title || "Untitled Meeting",
+      agenda: data.agenda || "",
+      meetingDate: data.meetingDate || new Date().toISOString().slice(0, 16).replace("T", " "),
+      durationMinutes: data.durationMinutes || 30,
+      participantIds: data.participantIds || [],
+      participantNames:
+        data.participantNames && data.participantNames.length > 0
+          ? data.participantNames
+          : [this.actorName()],
+      projectId: data.projectId,
+      projectName: data.projectName,
+      minutesContent: data.minutesContent || "",
+      aiSummary: data.aiSummary,
+      extractedActionItems: data.extractedActionItems || [],
+    };
+
+    const live = await this.request<Meeting>("/meetings", {
+      method: "POST",
+      body: JSON.stringify({
+        title: newMeeting.title,
+        agenda: newMeeting.agenda,
+        meetingDate: newMeeting.meetingDate,
+        durationMinutes: newMeeting.durationMinutes,
+        projectId: newMeeting.projectId,
+        participantIds: newMeeting.participantIds,
+        participantNames: newMeeting.participantNames,
+        minutesContent: newMeeting.minutesContent,
+      }),
+    });
+
+    const res = live || newMeeting;
+    this.meetings = [res, ...this.meetings];
+    this.saveStore("meetings", this.meetings);
+    this.addAuditLog(this.actorName(), "user", `Created meeting notes for "${res.title}"`);
+    return res;
+  }
+
+  public async updateMeeting(meetingId: string, updates: Partial<Meeting>): Promise<Meeting> {
+    const live = await this.request<Meeting>(`/meetings/${meetingId}`, {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    });
+
+    if (live) {
+      const idx = this.meetings.findIndex((m) => m.id === meetingId);
+      if (idx !== -1) {
+        this.meetings[idx] = live;
+        this.saveStore("meetings", this.meetings);
+      }
+      return live;
+    }
 
     const idx = this.meetings.findIndex((m) => m.id === meetingId);
     if (idx !== -1) {
-      // Simulate intelligent AI action item extraction if empty or new
+      this.meetings[idx] = {
+        ...this.meetings[idx],
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+      this.saveStore("meetings", this.meetings);
+      return this.meetings[idx];
+    }
+    throw new Error("Meeting not found");
+  }
+
+  public async deleteMeeting(meetingId: string): Promise<void> {
+    await this.request(`/meetings/${meetingId}`, { method: "DELETE" });
+    this.meetings = this.meetings.filter((m) => m.id !== meetingId);
+    this.saveStore("meetings", this.meetings);
+    this.addAuditLog(this.actorName(), "user", `Deleted meeting #${meetingId}`);
+  }
+
+  public async extractActionItems(meetingId: string, minutesContent?: string): Promise<Meeting> {
+    const live = await this.request<Meeting>(`/meetings/${meetingId}/extract-action-items`, {
+      method: "POST",
+      body: JSON.stringify(minutesContent ? { minutesContent } : {}),
+    });
+    if (live) {
+      const idx = this.meetings.findIndex((m) => m.id === meetingId);
+      if (idx !== -1) {
+        this.meetings[idx] = live;
+        this.saveStore("meetings", this.meetings);
+      }
+      return live;
+    }
+
+    const idx = this.meetings.findIndex((m) => m.id === meetingId);
+    if (idx !== -1) {
       const meeting = this.meetings[idx];
+      if (minutesContent) meeting.minutesContent = minutesContent;
       if (meeting.extractedActionItems.length === 0) {
         meeting.extractedActionItems = [
           {
@@ -694,6 +794,10 @@ class ApiService {
           },
         ];
       }
+      if (!meeting.aiSummary) {
+        meeting.aiSummary =
+          "Analyzed discussion items and identified immediate action points with targeted assignees.";
+      }
       this.saveStore("meetings", this.meetings);
       this.addAuditLog("Meeting Secretary (AI)", "agent", `Extracted action items for meeting "${meeting.title}"`);
       return meeting;
@@ -708,8 +812,20 @@ class ApiService {
     const action = meeting.extractedActionItems.find((a) => a.id === actionId);
     if (!action) throw new Error("Action item not found");
 
+    // Attempt live API conversion first
+    const live = await this.request<{ success: boolean; task: Task }>(
+      `/meetings/${meetingId}/action-items/${actionId}/convert-to-task`,
+      { method: "POST" }
+    );
+
     action.convertedToTask = true;
     this.saveStore("meetings", this.meetings);
+
+    if (live && live.task) {
+      this.tasks = [live.task, ...this.tasks];
+      this.saveStore("tasks", this.tasks);
+      return live.task;
+    }
 
     const createdTask = await this.createTask({
       title: action.title,

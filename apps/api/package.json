@@ -17,7 +17,8 @@
     "@bizcontext/database": "workspace:*",
     "@bizcontext/validation": "workspace:*",
     "@bizcontext/module-tickets": "workspace:*",
-    "@bizcontext/module-notifications": "workspace:*"
+    "@bizcontext/module-notifications": "workspace:*",
+    "@bizcontext/module-meetings": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",

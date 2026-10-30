@@ -333,3 +333,69 @@ export const UpdateNotificationPreferencesSchema = z.object({
   systemAnnouncements: z.boolean().optional(),
   dailyDigest: z.boolean().optional(),
 });
+
+// ---------------------------------------------------------------------------
+// Meetings & Minutes (Section 2.7, 8.3, 9: /api/v1/meetings)
+// ---------------------------------------------------------------------------
+
+export const MeetingActionItemPriorityEnum = z.enum(["low", "medium", "high", "urgent"]);
+
+export const CreateMeetingActionItemSchema = z.object({
+  title: z.string().min(1, "Title is required").max(500),
+  assignee: z.string().min(1, "Assignee is required").max(255),
+  assigneeId: z.string().uuid().optional(),
+  dueDate: z.string().optional(),
+  priority: MeetingActionItemPriorityEnum.default("medium"),
+});
+
+export const UpdateMeetingActionItemSchema = z.object({
+  title: z.string().min(1).max(500).optional(),
+  assignee: z.string().min(1).max(255).optional(),
+  assigneeId: z.string().uuid().nullable().optional(),
+  dueDate: z.string().nullable().optional(),
+  priority: MeetingActionItemPriorityEnum.optional(),
+  convertedToTask: z.boolean().optional(),
+});
+
+export const CreateMeetingSchema = z.object({
+  title: z.string().min(1, "Title is required").max(255),
+  agenda: z.string().max(2000).optional(),
+  meetingDate: z.string().min(1, "Meeting date is required"),
+  durationMinutes: z.coerce.number().int().min(1).max(1440).default(30),
+  projectId: z.string().uuid().optional(),
+  participantIds: z.array(z.string()).default([]),
+  participantNames: z.array(z.string()).default([]),
+  minutesContent: z.string().max(100000).optional(),
+  aiSummary: z.string().max(5000).optional(),
+  actionItems: z.array(CreateMeetingActionItemSchema).optional(),
+});
+
+export const UpdateMeetingSchema = z.object({
+  title: z.string().min(1).max(255).optional(),
+  agenda: z.string().max(2000).nullable().optional(),
+  meetingDate: z.string().optional(),
+  durationMinutes: z.coerce.number().int().min(1).max(1440).optional(),
+  projectId: z.string().uuid().nullable().optional(),
+  participantIds: z.array(z.string()).optional(),
+  participantNames: z.array(z.string()).optional(),
+  minutesContent: z.string().max(100000).nullable().optional(),
+  aiSummary: z.string().max(5000).nullable().optional(),
+});
+
+export const MeetingQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  projectId: z.string().uuid().optional(),
+  search: z.string().max(255).optional(),
+});
+
+export const ExtractActionItemsSchema = z.object({
+  minutesContent: z.string().max(100000).optional(),
+  forceRegenerate: z.boolean().default(false),
+});
+
+export const ConvertActionItemToTaskSchema = z.object({
+  projectId: z.string().uuid().optional(),
+  primaryAssigneeId: z.string().uuid().optional(),
+  status: z.enum(["open", "in_progress", "in_review", "blocked", "done", "cancelled"]).default("open"),
+});
