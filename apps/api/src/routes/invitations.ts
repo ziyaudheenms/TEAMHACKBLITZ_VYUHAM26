@@ -21,7 +21,7 @@
  *     where that avoids leaking which tokens exist.
  */
 
-import { createHash, randomBytes, randomInt } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { z } from "zod";
@@ -43,11 +43,19 @@ const err = (message: string, details?: unknown) => ({ error: { message, ...(det
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 const newToken = () => randomBytes(32).toString("base64url");
 
+/** Cryptographically-secure random integer in [min, max) using the Web Crypto API. */
+function getRandomInt(min: number, max: number): number {
+  const range = max - min;
+  const array = new Uint32Array(1);
+  crypto.getRandomValues(array);
+  return min + (array[0] % range);
+}
+
 /** Readable, unambiguous password (no 0/O/1/l/I). ~16 chars from a 54-symbol alphabet. */
 function generatePassword(length = 16): string {
   const alphabet = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let out = "";
-  for (let i = 0; i < length; i++) out += alphabet[randomInt(alphabet.length)];
+  for (let i = 0; i < length; i++) out += alphabet[getRandomInt(0, alphabet.length)];
   return out;
 }
 
