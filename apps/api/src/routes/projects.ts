@@ -47,7 +47,6 @@ projectsRoutes.get("/", async (c) => {
   const { data, error } = await supabase
     .from("projects")
     .select("*")
-    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -72,19 +71,16 @@ projectsRoutes.post("/", async (c) => {
 
   const supabase = getSupabaseServiceClient();
 
-  const insert = {
+  const insert: Record<string, unknown> = {
     name: String(body.name).trim(),
     description: body.description ? String(body.description).trim() : null,
     status: (body.status as string) ?? "active",
-    owner_id: (body.ownerId as string) ?? auth.userId,
-    owner_name: (body.ownerName as string) ?? null,
-    progress_percent: Number(body.progressPercent ?? 0),
-    department_name: (body.departmentName as string) ?? null,
-    tasks_count: body.tasksCount ?? { total: 0, done: 0 },
-    due_date: (body.dueDate as string) ?? null,
-    organisation_id: (body.organisationId as string) ?? null,
     created_by: auth.userId,
   };
+
+  if (body.organisationId) {
+    insert.organisation_id = body.organisationId;
+  }
 
   const { data, error } = await supabase
     .from("projects")

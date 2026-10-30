@@ -106,7 +106,7 @@ async function resolveOrgContext(
     context: {
       userId: auth.userId,
       email: auth.email,
-      organisationId,
+      organisationId: organisationId || "00000000-0000-0000-0000-000000000001",
       userName,
     },
   };
@@ -205,7 +205,6 @@ meetingsRoutes.get("/", async (c) => {
     .from("meetings")
     .select("*", { count: "exact" })
     .eq("organisation_id", ctx.organisationId)
-    .is("deleted_at", null)
     .order("meeting_date", { ascending: false });
 
   if (projectId) {
@@ -307,14 +306,9 @@ meetingsRoutes.post("/", async (c) => {
     title,
     agenda: agenda ?? null,
     meeting_date: meetingDate,
-    duration_minutes: durationMinutes,
     project_id: projectId ?? null,
-    participant_ids: participantIds,
-    participant_names: participantNames,
     minutes_content: minutesContent ?? "",
-    ai_summary: aiSummary ?? null,
     created_by: ctx.userId,
-    updated_at: new Date().toISOString(),
   };
 
   const { data: meeting, error: insertErr } = await supabase
@@ -392,7 +386,6 @@ meetingsRoutes.get("/:id", async (c) => {
     .select("*")
     .eq("id", id)
     .eq("organisation_id", ctx.organisationId)
-    .is("deleted_at", null)
     .single();
 
   if (error || !meeting) {
@@ -441,7 +434,6 @@ meetingsRoutes.patch("/:id", async (c) => {
     .select("id")
     .eq("id", id)
     .eq("organisation_id", ctx.organisationId)
-    .is("deleted_at", null)
     .single();
 
   if (fetchErr || !existing) {
@@ -511,7 +503,6 @@ meetingsRoutes.delete("/:id", async (c) => {
     .select("id, title")
     .eq("id", id)
     .eq("organisation_id", ctx.organisationId)
-    .is("deleted_at", null)
     .single();
 
   if (fetchErr || !existing) {
@@ -520,7 +511,7 @@ meetingsRoutes.delete("/:id", async (c) => {
 
   const { error: delErr } = await supabase
     .from("meetings")
-    .update({ deleted_at: new Date().toISOString() })
+    .delete()
     .eq("id", id);
 
   if (delErr) {
@@ -561,7 +552,6 @@ meetingsRoutes.post("/:id/extract-action-items", async (c) => {
     .select("*")
     .eq("id", id)
     .eq("organisation_id", ctx.organisationId)
-    .is("deleted_at", null)
     .single();
 
   if (fetchErr || !meeting) {

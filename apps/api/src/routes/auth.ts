@@ -71,38 +71,75 @@ authRoutes.post("/signup", async (c) => {
   }
 
   const { email, password, firstName, lastName } = parsed.data;
-  const supabase = getSupabaseAnonClient();
+  const anonClient = getSupabaseAnonClient();
+  const serviceClient = getSupabaseServiceClient();
 
-  const { data, error } = await supabase.auth.signUp({
+  let user: User | null = null;
+  let session: Session | null = null;
+
+  // Try creating the user pre-confirmed via service-role admin API first.
+  // This bypasses Supabase free-tier email rate limiting (2 emails/hr) and requires no confirmation email.
+  const { data: createData, error: createError } = await serviceClient.auth.admin.createUser({
     email,
     password,
-    options: {
-      data: {
-        firstName,
-        lastName,
-      },
-    },
+    email_confirm: true,
+    user_metadata: { firstName, lastName },
   });
 
-  if (error) {
-    if (error.status === 422) {
+  if (createError) {
+    const msg = createError.message.toLowerCase();
+    if (msg.includes("already registered") || msg.includes("already been registered") || createError.status === 422) {
       return errorMessage(c, 400, "An account with this email already exists");
     }
-    return errorMessage(c, 400, error.message);
+
+    // Fall back to standard anon signUp if admin.createUser encountered an unexpected issue
+    console.warn("[auth/signup] admin.createUser failed, falling back to anon signUp:", createError.message);
+    const { data: signUpData, error: signUpError } = await anonClient.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { firstName, lastName },
+      },
+    });
+
+    if (signUpError) {
+      if (signUpError.status === 422 || signUpError.message.toLowerCase().includes("already registered")) {
+        return errorMessage(c, 400, "An account with this email already exists");
+      }
+      return errorMessage(c, 400, signUpError.message);
+    }
+
+    if (!signUpData.user) {
+      return errorMessage(c, 400, "Signup failed: no user returned");
+    }
+
+    user = signUpData.user;
+    session = signUpData.session;
+
+    if (!session) {
+      // Auto-confirm user if pending
+      await serviceClient.auth.admin.updateUserById(user.id, { email_confirm: true }).catch(() => {});
+    }
+  } else {
+    user = createData.user;
   }
 
-  const session = data.session;
-  if (!session || !data.user) {
-    // Auto-confirm must be enabled on the Supabase project for instant signup.
-    // (Email verification has been disabled for now.)
-    return errorMessage(
-      c,
-      403,
-      "Signup could not be completed. Please ensure email auto-confirmation is enabled in the Supabase project."
-    );
+  // Obtain an authenticated session for the user
+  if (!session) {
+    const { data: signInData, error: signInError } = await anonClient.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (signInError || !signInData.session || !signInData.user) {
+      return errorMessage(c, 500, "Signup succeeded but session creation failed. Please log in.");
+    }
+
+    session = signInData.session;
+    user = signInData.user;
   }
 
-  return c.json({ user: toUserResponse(data.user), session: toSessionResponse(session) }, 201);
+  return c.json({ user: toUserResponse(user), session: toSessionResponse(session) }, 201);
 });
 
 // POST /api/v1/auth/login

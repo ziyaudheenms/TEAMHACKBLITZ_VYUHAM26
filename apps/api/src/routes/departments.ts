@@ -599,9 +599,10 @@ departmentsRoutes.delete("/:departmentId/members/:memberId", async (c) => {
     return errorResponse(c, 404, "Department member record not found");
   }
 
-  const deptOrgId = (
-    memberRecord.departments as { organisation_id: string } | null
-  )?.organisation_id;
+  const dept = memberRecord.departments as unknown;
+  const deptOrgId = Array.isArray(dept)
+    ? (dept[0] as { organisation_id: string } | undefined)?.organisation_id
+    : (dept as { organisation_id: string } | null | undefined)?.organisation_id;
 
   if (deptOrgId !== ctx.organisationId) {
     return errorResponse(c, 403, "Access denied");

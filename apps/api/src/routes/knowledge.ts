@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { CreateKnowledgePageSchema } from "@bizcontext/validation";
-import { getSupabaseAnonClient } from "../lib/supabase";
+import { getSupabaseServiceClient } from "../lib/supabase";
 import { getAuthContext } from "../lib/auth";
 
 const knowledgeRoutes = new Hono();
@@ -58,7 +58,7 @@ knowledgeRoutes.post("/pages", async (c) => {
   }
 
   const { organisationId, title, content, parentId, visibility } = parsed.data;
-  const supabase = getSupabaseAnonClient();
+  const supabase = getSupabaseServiceClient();
 
   const { data, error } = await supabase
     .from("pages")
@@ -92,7 +92,7 @@ knowledgeRoutes.get("/pages", async (c) => {
     return c.json({ error: { message: "Unauthorized" } }, 401);
   }
 
-  const supabase = getSupabaseAnonClient();
+  const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase.from("pages").select("*").order("created_at", {
     ascending: false,
   });
@@ -113,7 +113,7 @@ knowledgeRoutes.get("/pages/:id", async (c) => {
   }
 
   const id = c.req.param("id");
-  const supabase = getSupabaseAnonClient();
+  const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase.from("pages").select("*").eq("id", id).single();
 
   if (error) {

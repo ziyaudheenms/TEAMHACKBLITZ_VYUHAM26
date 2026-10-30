@@ -409,8 +409,12 @@ class ApiService {
 
   // --- Knowledge Workspace ---
   public async getKnowledgePages(): Promise<KnowledgePage[]> {
-    const live = await this.request<KnowledgePage[]>("/knowledge/pages");
-    return live || this.knowledgePages;
+    const live = await this.request<{ pages?: KnowledgePage[] } | KnowledgePage[]>("/knowledge/pages");
+    const pages = Array.isArray(live) ? live : live?.pages ?? this.knowledgePages;
+    if (pages) {
+      this.knowledgePages = pages;
+    }
+    return pages;
   }
 
   public async getKnowledgePage(id: string): Promise<KnowledgePage | undefined> {

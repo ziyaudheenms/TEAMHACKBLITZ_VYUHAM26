@@ -51,7 +51,6 @@ tasksRoutes.get("/", async (c) => {
   let query = supabase
     .from("tasks")
     .select("*")
-    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (projectId) {
@@ -82,22 +81,20 @@ tasksRoutes.post("/", async (c) => {
 
   const supabase = getSupabaseServiceClient();
 
-  const insert = {
+  const insert: Record<string, unknown> = {
     title: String(body.title).trim(),
     description: body.description ? String(body.description).trim() : null,
     project_id: (body.projectId as string) ?? null,
-    project_name: (body.projectName as string) ?? null,
     primary_assignee_id: (body.primaryAssigneeId as string) ?? null,
-    assignee_name: (body.assigneeName as string) ?? null,
-    assignee_avatar: (body.assigneeAvatar as string) ?? null,
-    collaborator_ids: Array.isArray(body.collaboratorIds) ? body.collaboratorIds : [],
     priority: (body.priority as string) ?? "medium",
     status: (body.status as string) ?? "open",
     due_date: (body.dueDate as string) ?? null,
-    subtasks: Array.isArray(body.subtasks) ? body.subtasks : [],
-    organisation_id: (body.organisationId as string) ?? null,
     created_by: auth.userId,
   };
+
+  if (body.organisationId) {
+    insert.organisation_id = body.organisationId;
+  }
 
   const { data, error } = await supabase
     .from("tasks")
@@ -138,7 +135,6 @@ tasksRoutes.patch("/:id/status", async (c) => {
     .from("tasks")
     .select("id")
     .eq("id", id)
-    .is("deleted_at", null)
     .single();
 
   if (fetchError || !existing) {

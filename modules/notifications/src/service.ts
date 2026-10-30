@@ -11,6 +11,13 @@ import type {
   NotificationPriority,
 } from "@bizcontext/types";
 
+export type {
+  AppNotification,
+  NotificationCategory,
+  NotificationPreferences,
+  NotificationPriority,
+};
+
 export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [
   "task",
   "ticket",

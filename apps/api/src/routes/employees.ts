@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { CreateEmployeeSchema } from "@bizcontext/validation";
-import { getSupabaseAnonClient } from "../lib/supabase";
+import { getSupabaseServiceClient } from "../lib/supabase";
 import { getAuthContext } from "../lib/auth";
 
 const employeesRoutes = new Hono();
@@ -68,7 +68,7 @@ employeesRoutes.post("/", async (c) => {
     designation,
     employmentStatus,
   } = parsed.data;
-  const supabase = getSupabaseAnonClient();
+  const supabase = getSupabaseServiceClient();
 
   const { data, error } = await supabase
     .from("employee_profiles")
@@ -100,7 +100,7 @@ employeesRoutes.get("/", async (c) => {
     return c.json({ error: { message: "Unauthorized" } }, 401);
   }
 
-  const supabase = getSupabaseAnonClient();
+  const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase.from("employee_profiles").select("*");
 
   if (error) {
@@ -119,7 +119,7 @@ employeesRoutes.get("/:id", async (c) => {
   }
 
   const id = c.req.param("id");
-  const supabase = getSupabaseAnonClient();
+  const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase
     .from("employee_profiles")
     .select("*")

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { CreateOrganisationSchema } from "@bizcontext/validation";
-import { getSupabaseAnonClient } from "../lib/supabase";
+import { getSupabaseServiceClient } from "../lib/supabase";
 import { getAuthContext } from "../lib/auth";
 
 const organisationsRoutes = new Hono();
@@ -39,7 +39,7 @@ organisationsRoutes.post("/", async (c) => {
   }
 
   const { name, slug, parentId } = parsed.data;
-  const supabase = getSupabaseAnonClient();
+  const supabase = getSupabaseServiceClient();
 
   const { data, error } = await supabase
     .from("organisations")
@@ -66,7 +66,7 @@ organisationsRoutes.get("/", async (c) => {
     return c.json({ error: { message: "Unauthorized" } }, 401);
   }
 
-  const supabase = getSupabaseAnonClient();
+  const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase.from("organisations").select("*").order("created_at", {
     ascending: false,
   });
