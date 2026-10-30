@@ -13,6 +13,7 @@ import projectsRoutes from "./routes/projects";
 import tasksRoutes from "./routes/tasks";
 import notificationsRoutes from "./routes/notifications";
 import meetingsRoutes from "./routes/meetings";
+import analyticsRoutes from "./routes/analytics";
 
 const app = new Hono();
 const v1 = new Hono();
@@ -70,6 +71,7 @@ v1.route("/projects", projectsRoutes);
 v1.route("/tasks", tasksRoutes);
 v1.route("/notifications", notificationsRoutes);
 v1.route("/meetings", meetingsRoutes);
+v1.route("/analytics", analyticsRoutes);
 
 app.route("/api/v1", v1);
 
