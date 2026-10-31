@@ -33,6 +33,7 @@ export function useRBAC() {
   const canViewAnalytics = isMember;
   const canManageAgents = isAdmin;
   const canApproveBrowserJobs = isAdmin;
+  const canManageEmployees = isAdmin;
 
   return {
     role,
@@ -46,5 +47,6 @@ export function useRBAC() {
     canViewAnalytics,
     canManageAgents,
     canApproveBrowserJobs,
+    canManageEmployees,
   };
 }
