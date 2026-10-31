@@ -18,6 +18,7 @@ import {
   Bot,
   CheckCircle2,
 } from "lucide-react";
+import { SynthioHeroSection } from "../components/landing/SynthioHeroSection";
 
 /* ──────────────────────────────────────────
    Animated counter
@@ -76,60 +77,6 @@ function FeatureCard({ icon: Icon, title, description, accent = "#74D96F", delay
 }
 
 /* ──────────────────────────────────────────
-   Navigation — exact Agno style
-────────────────────────────────────────── */
-function Nav() {
-  const [scrolled, setScrolled] = useState(false);
-  useEffect(() => {
-    const h = () => setScrolled(window.scrollY > 4);
-    window.addEventListener("scroll", h, { passive: true });
-    return () => window.removeEventListener("scroll", h);
-  }, []);
-
-  return (
-    <header className={`fixed top-0 left-0 right-0 z-50 bg-white transition-shadow duration-200 ${scrolled ? "shadow-[0_1px_0_#e8e8e8]" : "border-b border-[#ebebeb]"}`}>
-      <div className="max-w-[1180px] mx-auto px-4 sm:px-6 h-[52px] flex items-center justify-between">
-
-        {/* Logo — matches Agno angular icon + wordmark */}
-        <Link href="/" className="flex items-center gap-2 group">
-          {/* Custom angular logo matching Agno's bracket-style icon */}
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" className="shrink-0">
-            <path d="M4 24 L14 4 L24 24" stroke="#74D96F" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-            <path d="M8.5 17 L19.5 17" stroke="#74D96F" strokeWidth="2.5" strokeLinecap="round"/>
-          </svg>
-          <span className="font-extrabold text-[#1a1a1a] text-[1.1rem] tracking-tight leading-none">BizContext</span>
-        </Link>
-
-        {/* Center nav links */}
-        <nav className="hidden md:flex items-center gap-0.5">
-          {[
-            { label: "Products", drop: true },
-            { label: "Resources", drop: true },
-            { label: "Pricing", drop: false },
-            { label: "Enterprise", drop: false },
-          ].map((item) => (
-            <a key={item.label} href="#" className="flex items-center gap-0.5 px-3.5 py-2 text-[0.875rem] text-[#444] hover:text-[#1a1a1a] font-medium rounded-lg hover:bg-[#f5f5f5] transition-colors">
-              {item.label}
-              {item.drop && <ChevronDown className="w-3.5 h-3.5 text-[#888] mt-px" />}
-            </a>
-          ))}
-        </nav>
-
-        {/* Right CTA pair */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <Link href="/login" className="px-3 sm:px-4 py-1.5 text-[0.75rem] sm:text-[0.8125rem] font-semibold text-[#333] border border-[#ccc] rounded-md hover:border-[#aaa] hover:text-[#1a1a1a] transition-all tracking-wide uppercase">
-            Login
-          </Link>
-          <Link href="/dashboard" className="px-3 sm:px-4 py-1.5 text-[0.75rem] sm:text-[0.8125rem] font-semibold text-white rounded-md transition-all tracking-wide uppercase hover:opacity-90" style={{ backgroundColor: "#74D96F", color: "#1a1a1a" }}>
-            Sign Up
-          </Link>
-        </div>
-      </div>
-    </header>
-  );
-}
-
-/* ──────────────────────────────────────────
    Main Page
 ────────────────────────────────────────── */
 export default function LandingPage() {
@@ -163,125 +110,10 @@ export default function LandingPage() {
         @keyframes fadeUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
 
-      <Nav />
-
       {/* ══════════════════════════════════════════
-          HERO — exact Agno layout
+          HERO — Synthio Style with 3D Frosted Mosaic
       ══════════════════════════════════════════ */}
-      <section className="relative overflow-hidden bg-white" style={{ minHeight: "calc(100vh - 52px)", marginTop: "52px" }}>
-
-        {/* ── Agno-exact diagonal gray polygon ── */}
-        {/* Large angular shape bottom-left to mid area */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: "linear-gradient(160deg, #f3f3f0 0%, #eeede9 35%, transparent 55%)",
-            clipPath: "polygon(0 0, 62% 0, 38% 100%, 0 100%)",
-          }}
-        />
-        {/* Secondary lighter sweep */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: "linear-gradient(145deg, #f8f8f5 0%, #f1f0ec 20%, transparent 45%)",
-            clipPath: "polygon(0 0, 48% 0, 28% 100%, 0 100%)",
-          }}
-        />
-
-        {/* ── Content grid ── */}
-        <div className="relative max-w-[1180px] mx-auto px-4 sm:px-6 flex flex-col lg:flex-row items-start lg:items-center h-full min-h-[calc(100vh-52px)]">
-
-          {/* ── LEFT: Hero text ── */}
-          <div
-            className="relative z-10 flex-none w-full lg:w-[42%] pt-12 sm:pt-16 lg:pt-0 pb-8 lg:pb-0"
-            style={{ opacity: vis ? 1 : 0, transform: vis ? "none" : "translateY(20px)", transition: "opacity 0.6s ease, transform 0.6s ease" }}
-          >
-            {/* Massive headline — Agno style: plain black, two lines */}
-            <h1
-              className="font-extrabold text-[#0d0d0d] leading-[1.08] tracking-[-0.035em] mb-5 text-3xl sm:text-4xl md:text-5xl lg:text-[3.5rem]"
-            >
-              Build your own<br />
-              <span className="text-[#74D96F]">AI workspace</span>
-            </h1>
-
-            {/* Body — Agno style: small, gray, tight */}
-            <p className="text-[#555] text-[0.9375rem] leading-[1.65] mb-8 max-w-md lg:max-w-[340px]">
-              BizContext is a self-driving AI workspace that runs in your org. Build intelligent agents, automate operations, and let your team move at the speed of thought.
-            </p>
-
-            {/* CTAs — exact Agno layout: filled button + ghost text button inline */}
-            <div className="flex items-center gap-4 flex-wrap">
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center px-5 py-2.5 rounded-md font-bold text-[0.875rem] tracking-wide uppercase text-[#1a1a1a] transition-all hover:opacity-90 hover:-translate-y-px"
-                style={{ backgroundColor: "#74D96F", boxShadow: "0 2px 12px rgba(116,217,111,0.35)" }}
-              >
-                Get Started
-              </Link>
-              <button className="inline-flex items-center gap-1.5 text-[0.875rem] font-semibold text-[#444] hover:text-[#1a1a1a] transition-colors uppercase tracking-wide">
-                Explore Features
-                <ChevronDown className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* ── RIGHT: App Screenshot — Agno style ── */}
-          <div
-            className="flex-1 relative lg:absolute lg:right-0 lg:top-0 lg:bottom-0 flex items-start lg:items-center w-full lg:w-auto"
-            style={{
-              opacity: vis ? 1 : 0,
-              transform: vis ? "none" : "translateY(12px)",
-              transition: "opacity 0.75s ease 0.12s, transform 0.75s ease 0.12s",
-            }}
-          >
-            {/* The screenshot panel — dark frame, responsive width */}
-            <div
-              className="relative w-full max-w-[720px] lg:w-[clamp(420px,58vw,720px)] ml-auto mt-6 lg:mt-[52px] mb-12 lg:mb-0"
-            >
-              {/* Outer dark rounded frame */}
-              <div
-                className="overflow-hidden rounded-2xl lg:rounded-r-none border border-[#2a2a2a] lg:border-r-0"
-                style={{
-                  boxShadow: "-24px 24px 80px rgba(0,0,0,0.22), -4px 0 40px rgba(0,0,0,0.12)",
-                }}
-              >
-                {/* Dark title bar — matches Agno's dark app chrome */}
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-[#1c1c1c] border-b border-[#303030]">
-                  <div className="flex gap-1.5 shrink-0">
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
-                  </div>
-                  <div className="flex-1 flex items-center justify-center">
-                    <div className="flex items-center gap-2 bg-[#2a2a2a] border border-[#3a3a3a] rounded px-3 py-0.5 max-w-[200px] w-full">
-                      <div className="w-1.5 h-1.5 rounded-full bg-[#74D96F]" />
-                      <span className="text-[10px] text-[#777] font-mono truncate">bizcontext.ai/projects</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actual screenshot */}
-                <Image
-                  src="/app-screenshot.png"
-                  alt="BizContext AI workspace — Projects & Kanban"
-                  width={1008}
-                  height={504}
-                  className="w-full h-auto block"
-                  priority
-                  style={{ display: "block" }}
-                />
-              </div>
-
-              {/* Floating status pill — subtle badge */}
-              <div className="absolute -bottom-4 left-4 sm:left-6 bg-white border border-[#e8e8e8] rounded-full px-3 py-1 sm:px-3.5 sm:py-1.5 flex items-center gap-2 shadow-[0_4px_24px_rgba(0,0,0,0.1)]">
-                <div className="w-2 h-2 rounded-full bg-[#74D96F] animate-pulse" />
-                <span className="text-[10px] sm:text-[11px] font-semibold text-[#444]">4 agents running now</span>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </section>
+      <SynthioHeroSection />
 
       {/* ══════════════════════════════════════════
           LOGO MARQUEE — exact Agno bottom strip

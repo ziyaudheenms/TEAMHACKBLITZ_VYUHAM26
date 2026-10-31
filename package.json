@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "bun --filter '*' dev",
     "build": "bun --filter '*' build",
+    "start:api": "bun apps/api/src/index.ts",
     "lint": "oxlint .",
     "format": "biome format --write .",
     "format:check": "biome format .",

@@ -11,10 +11,12 @@ import {
   RefreshCw,
   Calendar,
   X,
+  Sparkles,
 } from "lucide-react";
 import { api } from "../../services/api";
 import { ApiError } from "../../services/http";
 import { Project, Task, EmployeeProfile } from "../../types";
+import { AssignmentRecommendationModal } from "../../components/assignment/AssignmentRecommendationModal";
 
 const COLUMNS: Array<{ id: Task["status"]; title: string; color: string; badge: string }> = [
   { id: "open", title: "Open / Backlog", color: "border-[#EDEDED] bg-[#EDEDED]/50", badge: "bg-white text-[#262626] border border-[#BEBEBE]" },
@@ -81,6 +83,8 @@ export default function ProjectsKanbanPage() {
   const [taskAssigneeUserId, setTaskAssigneeUserId] = useState("");
   const [taskPriority, setTaskPriority] = useState<Task["priority"]>("medium");
   const [taskDueDate, setTaskDueDate] = useState("");
+  const [taskRequiredSkills, setTaskRequiredSkills] = useState("");
+  const [assignmentModalTask, setAssignmentModalTask] = useState<Task | null>(null);
 
   // Form states for new project
   const [projectName, setProjectName] = useState("");
@@ -216,6 +220,7 @@ export default function ProjectsKanbanPage() {
   const openTaskModal = () => {
     setTaskFormError(null);
     setTaskProjectId(selectedProjectId !== "all" ? selectedProjectId : "");
+    setTaskRequiredSkills("");
     setIsTaskModalOpen(true);
   };
 
@@ -226,6 +231,11 @@ export default function ProjectsKanbanPage() {
     setIsCreatingTask(true);
     setTaskFormError(null);
     try {
+      const skillsArray = taskRequiredSkills
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+
       const created = await api.createTask({
         title: taskTitle.trim(),
         description: taskDescription.trim() || undefined,
@@ -235,6 +245,8 @@ export default function ProjectsKanbanPage() {
         priority: taskPriority,
         status: "open",
         dueDate: taskDueDate ? `${taskDueDate}T00:00:00.000Z` : undefined,
+        requiredSkills: skillsArray,
+        skillTags: skillsArray,
       });
 
       setTasks((prev) => [created, ...prev]);
@@ -243,6 +255,12 @@ export default function ProjectsKanbanPage() {
       setTaskDescription("");
       setTaskAssigneeUserId("");
       setTaskDueDate("");
+      setTaskRequiredSkills("");
+
+      // If created unassigned, launch the AI workload recommendation modal immediately!
+      if (!UUID_RE.test(taskAssigneeUserId)) {
+        setAssignmentModalTask(created);
+      }
     } catch (err) {
       setTaskFormError(errorMessage(err, "Failed to create task."));
     } finally {
@@ -590,14 +608,54 @@ export default function ProjectsKanbanPage() {
                             </div>
                           )}
 
+                          {/* Skill Tags */}
+                          {task.requiredSkills && task.requiredSkills.length > 0 && (
+                            <div className="flex flex-wrap gap-1 pt-0.5">
+                              {task.requiredSkills.map((sk) => (
+                                <span
+                                  key={sk}
+                                  className="px-1.5 py-0.5 rounded-md bg-[#74D96F]/15 text-[#1F541D] text-[9px] font-semibold border border-[#74D96F]/30"
+                                >
+                                  {sk}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
                           {/* Card Footer: Assignee & Quick Status Shift */}
                           <div className="flex items-center justify-between pt-2 border-t border-[#EDEDED] text-[11px] text-[#666666]">
-                            <div className="flex items-center space-x-1.5 truncate">
-                              <User className="w-3.5 h-3.5 text-[#666666] shrink-0" />
-                              <span className="truncate text-[#262626] font-medium text-[10px]">
-                                {task.assigneeName || (task.primaryAssigneeId ? "Assigned" : "Unassigned")}
-                              </span>
-                            </div>
+                            {!task.primaryAssigneeId ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAssignmentModalTask(task);
+                                }}
+                                className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full bg-[#74D96F]/20 hover:bg-[#74D96F]/35 text-[#1F541D] border border-[#74D96F]/50 text-[9px] font-black transition cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
+                                title="Run workload-aware assignment recommendation"
+                              >
+                                <Sparkles className="w-2.5 h-2.5 text-[#56BE51]" />
+                                <span>Smart Match</span>
+                              </button>
+                            ) : (
+                              <div className="flex items-center space-x-1 truncate max-w-[140px]">
+                                <User className="w-3.5 h-3.5 text-[#666666] shrink-0" />
+                                <span className="truncate text-[#262626] font-medium text-[10px]">
+                                  {task.assigneeName || "Assigned"}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setAssignmentModalTask(task);
+                                  }}
+                                  className="p-0.5 rounded-md hover:bg-[#EDEDED] text-[#999999] hover:text-[#56BE51] transition cursor-pointer shrink-0"
+                                  title="Re-evaluate with workload assignment engine"
+                                >
+                                  <Sparkles className="w-3 h-3 text-[#56BE51]" />
+                                </button>
+                              </div>
+                            )}
 
                             <div className="flex items-center space-x-1.5">
                               {isPending && <Loader2 className="w-3 h-3 animate-spin text-[#74D96F]" />}
@@ -761,6 +819,25 @@ export default function ProjectsKanbanPage() {
               </div>
             </div>
 
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-[#262626]">
+                  Required Skills / Tags (comma-separated)
+                </label>
+                <span className="text-[10px] text-[#56BE51] font-bold">⚡ Workload AI Match</span>
+              </div>
+              <input
+                type="text"
+                value={taskRequiredSkills}
+                onChange={(e) => setTaskRequiredSkills(e.target.value)}
+                placeholder="e.g. react, postgresql, devops, python"
+                className="w-full rounded-xl border border-[#BEBEBE]/60 bg-[#F8F9FA] px-3 py-2 text-xs text-[#262626] placeholder-[#999999] focus:outline-none focus:border-[#74D96F] focus:bg-white"
+              />
+              <p className="mt-1 text-[10px] text-[#666666]">
+                Leave Assignee empty to automatically trigger smart workload-aware candidate scoring upon creation.
+              </p>
+            </div>
+
             <div className="flex justify-end space-x-2 pt-3 border-t border-[#EDEDED]">
               <button
                 type="button"
@@ -882,6 +959,25 @@ export default function ProjectsKanbanPage() {
             </div>
           </form>
         </div>
+      )}
+
+      {/* Workload-Aware Assignment Recommendation Modal */}
+      {assignmentModalTask && (
+        <AssignmentRecommendationModal
+          task={assignmentModalTask}
+          isOpen={!!assignmentModalTask}
+          onClose={() => setAssignmentModalTask(null)}
+          employees={employees}
+          onAssigned={(taskId, assigneeId, assigneeName) => {
+            setTasks((prev) =>
+              prev.map((t) =>
+                t.id === taskId
+                  ? { ...t, primaryAssigneeId: assigneeId, assigneeName }
+                  : t
+              )
+            );
+          }}
+        />
       )}
     </div>
   );

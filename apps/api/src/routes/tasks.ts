@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { getSupabaseServiceClient } from "../lib/supabase";
 import { getFullAuthContext, requireRole } from "../lib/auth";
+import { refreshEmployeeMetrics } from "../services/assignment.service";
 
 const tasksRoutes = new Hono();
 
@@ -32,6 +33,8 @@ function toTask(row: Record<string, unknown>) {
     status: (row.status as string) ?? "open",
     dueDate: (row.due_date as string) ?? null,
     subtasks: Array.isArray(row.subtasks) ? row.subtasks : [],
+    requiredSkills: Array.isArray(row.required_skills) ? (row.required_skills as string[]) : [],
+    skillTags: Array.isArray(row.skill_tags) ? (row.skill_tags as string[]) : [],
   };
 }
 
@@ -76,6 +79,16 @@ tasksRoutes.post("/", async (c) => {
       priority: (body.priority as string) ?? "medium",
       status: (body.status as string) ?? "open",
       due_date: (body.dueDate as string) ?? null,
+      required_skills: Array.isArray(body.requiredSkills)
+        ? body.requiredSkills
+        : Array.isArray(body.required_skills)
+        ? body.required_skills
+        : [],
+      skill_tags: Array.isArray(body.skillTags)
+        ? body.skillTags
+        : Array.isArray(body.skill_tags)
+        ? body.skill_tags
+        : [],
       created_by: auth.userId,
       organisation_id: auth.organisationId,
     })
@@ -111,6 +124,20 @@ async function updateStatus(c: Context) {
 
   if (error) return err(c, 500, "Failed to update task status");
   if (!data) return err(c, 404, "Task not found");
+
+  // Async: refresh metrics for the assignee after task completion (fire-and-forget)
+  const row = data as Record<string, unknown>;
+  if (
+    body.status === "done" &&
+    row.primary_assignee_id &&
+    row.organisation_id
+  ) {
+    void refreshEmployeeMetrics(
+      String(row.organisation_id),
+      String(row.primary_assignee_id)
+    );
+  }
+
   return c.json({ data: toTask(data as Record<string, unknown>) }, 200);
 }
 

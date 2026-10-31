@@ -19,11 +19,37 @@ import agentsRoutes from "./routes/agents";
 import adminRoutes from "./routes/admin";
 import invitationsRoutes from "./routes/invitations";
 import channelsRoutes from "./routes/channels";
+import assignmentRoutes from "./routes/assignment";
 
 const app = new Hono();
 const v1 = new Hono();
 
-app.use("*", cors());
+// CORS configuration: Support CORS_ORIGIN env var and ensure all frontend headers are permitted
+const allowedOriginEnv = process.env.CORS_ORIGIN;
+const allowedOrigins = allowedOriginEnv ? allowedOriginEnv.split(",").map((o) => o.trim()) : null;
+
+app.use(
+  "*",
+  cors({
+    origin: (origin) => {
+      if (!allowedOrigins || allowedOrigins.includes("*")) return "*";
+      if (!origin) return "*";
+      return allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+    },
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-User-Id",
+      "X-Organisation-Id",
+      "X-Custom-Header",
+      "X-Requested-With",
+      "apikey",
+    ],
+    exposeHeaders: ["Content-Length", "X-Kuma-Revision"],
+    credentials: true,
+  })
+);
 
 // Health Check
 app.get("/health", (c) => {
@@ -58,6 +84,7 @@ v1.get("/", (c) => {
       "/api/v1/integrations",
       "/api/v1/search",
       "/api/v1/analytics",
+      "/api/v1/assignment",
     ],
   });
 });
@@ -81,14 +108,17 @@ v1.route("/agents", agentsRoutes);
 v1.route("/admin", adminRoutes);
 v1.route("/invitations", invitationsRoutes);
 v1.route("/channels", channelsRoutes);
+v1.route("/assignment", assignmentRoutes);
 
 app.route("/api/v1", v1);
 
-const port = process.env.API_PORT ? parseInt(process.env.API_PORT, 10) : 3001;
+const port = Number(process.env.PORT) || Number(process.env.API_PORT) || 3001;
+const hostname = process.env.HOST || "0.0.0.0";
 
-console.log(`BizContext AI API running on port ${port}`);
+console.log(`BizContext AI API running on http://${hostname}:${port}`);
 
 export default {
   port,
+  hostname,
   fetch: app.fetch,
 };

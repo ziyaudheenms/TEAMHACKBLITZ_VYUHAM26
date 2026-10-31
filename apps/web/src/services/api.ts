@@ -15,6 +15,9 @@ import type {
   NotificationPreferences,
   GlobalSearchResponse,
   SecondBrainResponse,
+  AssignmentRecommendation,
+  EmployeeSkillItem,
+  EmployeePerformanceMetrics,
 } from "../types";
 import { http, ApiError, sessionStore, toStoredSession } from "./http";
 import type { AuthResponse, StoredSession } from "./http";
@@ -140,6 +143,8 @@ interface TaskRow {
   status: Task["status"];
   dueDate: string | null;
   subtasks?: Task["subtasks"];
+  requiredSkills?: string[];
+  skillTags?: string[];
 }
 
 const summarise = (content: string) =>
@@ -553,6 +558,8 @@ class ApiService {
       status: row.status,
       dueDate: row.dueDate ?? undefined,
       subtasks: row.subtasks ?? [],
+      requiredSkills: row.requiredSkills ?? [],
+      skillTags: row.skillTags ?? [],
     };
   }
 
@@ -627,6 +634,8 @@ class ApiService {
         priority: data.priority ?? "medium",
         status: data.status ?? "open",
         dueDate: data.dueDate,
+        requiredSkills: data.requiredSkills,
+        skillTags: data.skillTags,
       }),
     });
     const { projectRows, employees } = await this.lookups();
@@ -935,6 +944,69 @@ class ApiService {
       method: "PUT",
       body: JSON.stringify(prefs),
     });
+    return res.data;
+  }
+
+  // --- Workload-Aware Assignment --------------------------------------------------------
+
+  public async getTaskAssignmentRecommendation(taskId: string): Promise<AssignmentRecommendation> {
+    const res = await this.call<{ data: AssignmentRecommendation }>(`/assignment/tasks/${taskId}/recommendation`);
+    return res.data;
+  }
+
+  public async approveTaskAssignment(
+    taskId: string,
+    payload: { action: "approve" | "override"; finalAssigneeId: string; overrideReason?: string }
+  ): Promise<{ status: string; finalAssigneeId: string; taskId: string }> {
+    const res = await this.call<{ data: { status: string; finalAssigneeId: string; taskId: string } }>(
+      `/assignment/tasks/${taskId}/approve`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+    return res.data;
+  }
+
+  public async dismissTaskAssignment(taskId: string): Promise<void> {
+    await this.call(`/assignment/tasks/${taskId}/dismiss`, { method: "POST" });
+  }
+
+  public async getEmployeeSkills(employeeId: string): Promise<EmployeeSkillItem[]> {
+    const res = await this.call<{ data: EmployeeSkillItem[] }>(`/assignment/employees/${employeeId}/skills`);
+    return res.data;
+  }
+
+  public async addEmployeeSkill(
+    employeeId: string,
+    payload: { skillName: string; proficiency?: string; verificationState?: string; source?: string }
+  ): Promise<EmployeeSkillItem> {
+    const res = await this.call<{ data: EmployeeSkillItem }>(`/assignment/employees/${employeeId}/skills`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return res.data;
+  }
+
+  public async verifyEmployeeSkill(
+    employeeId: string,
+    skillId: string,
+    state: "verified" | "rejected"
+  ): Promise<EmployeeSkillItem> {
+    const res = await this.call<{ data: EmployeeSkillItem }>(
+      `/assignment/employees/${employeeId}/skills/${skillId}/verify`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ state }),
+      }
+    );
+    return res.data;
+  }
+
+  public async getEmployeePerformanceMetrics(employeeId: string): Promise<EmployeePerformanceMetrics | null> {
+    const res = await this.call<{ data: EmployeePerformanceMetrics | null }>(
+      `/assignment/employees/${employeeId}/metrics`
+    );
     return res.data;
   }
 }

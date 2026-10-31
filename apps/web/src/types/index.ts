@@ -105,6 +105,8 @@ export interface Task extends BaseEntity {
   status: "open" | "in_progress" | "blocked" | "in_review" | "done" | "cancelled";
   dueDate?: string;
   subtasks?: { id: string; title: string; completed: boolean }[];
+  requiredSkills?: string[];
+  skillTags?: string[];
 }
 
 export interface Ticket extends BaseEntity {
@@ -287,4 +289,73 @@ export interface SecondBrainResponse {
     actionType: string;
     payload: string;
   }>;
+}
+
+// ─── Workload-Aware Assignment ───────────────────────────────────────────────
+
+export interface CandidateAlternative {
+  employeeId: string;
+  name: string;
+  compositeScore?: number;
+  overloadWarning?: boolean;
+  explanation: string;
+}
+
+export interface CandidateRecommendation {
+  employeeId: string;
+  name: string;
+  designation?: string | null;
+  similarWorkScore?: number;
+  onTimeRate?: number;
+  verifiedSkillsScore?: number;
+  capacityScore?: number;
+  composite?: number;
+  overloadWarning?: boolean;
+  explanation?: string;
+  scoreBreakdown?: {
+    similar_work: number;
+    reliability: number;
+    skills: number;
+    capacity: number;
+    composite: number;
+  };
+}
+
+export interface AssignmentRecommendation {
+  id: string;
+  taskId: string;
+  status: "pending" | "approved" | "overridden" | "dismissed" | "no_match";
+  confidence: "high" | "medium" | "low";
+  explanation: string | null;
+  alternatives: CandidateAlternative[];
+  recommended: CandidateRecommendation | null;
+  finalAssigneeId?: string | null;
+  approvedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeSkillItem {
+  id: string;
+  skillName: string;
+  proficiency: "beginner" | "intermediate" | "expert";
+  verificationState: "unverified" | "verified" | "rejected";
+  source: "manual" | "cv_extraction" | "manager_review";
+  verifiedAt?: string | null;
+  createdAt: string;
+}
+
+export interface EmployeePerformanceMetrics {
+  id: string;
+  employeeId: string;
+  totalTasksCompleted: number;
+  tasksOnTime: number;
+  onTimeRate: number;
+  similarWorkScore: number;
+  workloadScore: number;
+  verifiedSkillsScore: number;
+  compositeScore: number;
+  activeTaskCount: number;
+  isTopPerformer: boolean;
+  refreshedAt: string;
 }

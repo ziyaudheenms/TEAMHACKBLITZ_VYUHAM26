@@ -15,9 +15,15 @@ import {
   RefreshCw,
   Trash2,
   MailPlus,
+  Sparkles,
+  TrendingUp,
+  Award,
+  Activity,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { api, type CreatedInvitation, type Invitation } from "../../services/api";
-import { EmployeeProfile, Department } from "../../types";
+import { EmployeeProfile, Department, EmployeePerformanceMetrics, EmployeeSkillItem } from "../../types";
 import { useRBAC } from "../../lib/useRBAC";
 
 const ROLE_OPTIONS = ["member", "admin", "guest", "owner"] as const;
@@ -118,6 +124,60 @@ export default function DirectoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDept, setSelectedDept] = useState("all");
   const [selectedEmployee, setSelectedEmployee] = useState<EmployeeProfile | null>(null);
+  const [empMetrics, setEmpMetrics] = useState<EmployeePerformanceMetrics | null>(null);
+  const [empSkills, setEmpSkills] = useState<EmployeeSkillItem[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(false);
+  const [newSkillName, setNewSkillName] = useState("");
+  const [isAddingSkill, setIsAddingSkill] = useState(false);
+
+  useEffect(() => {
+    if (!selectedEmployee) {
+      setEmpMetrics(null);
+      setEmpSkills([]);
+      return;
+    }
+    setSkillsLoading(true);
+    void Promise.all([
+      api.getEmployeeSkills(selectedEmployee.id).catch(() => []),
+      isAdmin
+        ? api.getEmployeePerformanceMetrics(selectedEmployee.id).catch(() => null)
+        : Promise.resolve(null),
+    ]).then(([sk, met]) => {
+      setEmpSkills(sk);
+      setEmpMetrics(met);
+      setSkillsLoading(false);
+    });
+  }, [selectedEmployee, isAdmin]);
+
+  const handleVerifySkill = async (skillId: string, state: "verified" | "rejected") => {
+    if (!selectedEmployee) return;
+    try {
+      await api.verifyEmployeeSkill(selectedEmployee.id, skillId, state);
+      setEmpSkills((prev) =>
+        prev.map((s) => (s.id === skillId ? { ...s, verificationState: state } : s))
+      );
+    } catch (e) {
+      console.error("Failed to update skill verification", e);
+    }
+  };
+
+  const handleAddSkill = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEmployee || !newSkillName.trim()) return;
+    setIsAddingSkill(true);
+    try {
+      const added = await api.addEmployeeSkill(selectedEmployee.id, {
+        skillName: newSkillName.trim(),
+        verificationState: isAdmin ? "verified" : "unverified",
+      });
+      setEmpSkills((prev) => [...prev, added]);
+      setNewSkillName("");
+    } catch (e) {
+      console.error("Failed to add skill", e);
+    } finally {
+      setIsAddingSkill(false);
+    }
+  };
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -518,22 +578,154 @@ export default function DirectoryPage() {
               </div>
             </dl>
 
-            <div>
-              <div className="text-[11px] font-bold text-[#666666] uppercase tracking-wider mb-2">Skills</div>
-              {selectedEmployee.skills.length === 0 ? (
+            {/* Performance Metrics Card (Owner/Admin only) */}
+            {isAdmin && empMetrics && (
+              <div className="rounded-2xl border border-[#74D96F]/40 bg-[#74D96F]/10 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#1F541D] flex items-center space-x-1.5">
+                    <Activity className="w-3.5 h-3.5 text-[#56BE51]" />
+                    <span>Workload & Performance Metrics</span>
+                  </span>
+                  {empMetrics.isTopPerformer && (
+                    <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-[#0D382E] text-[#74D96F] flex items-center space-x-1">
+                      <Award className="w-3 h-3 text-[#74D96F]" />
+                      <span>Top Performer Buffer (25%)</span>
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-white rounded-xl p-2 border border-[#EDEDED]">
+                    <span className="text-[10px] text-[#666666] block">On-Time Rate</span>
+                    <span className="text-xs font-black text-[#262626]">
+                      {Math.round(empMetrics.onTimeRate * 100)}%
+                    </span>
+                  </div>
+                  <div className="bg-white rounded-xl p-2 border border-[#EDEDED]">
+                    <span className="text-[10px] text-[#666666] block">Active Tasks</span>
+                    <span className="text-xs font-black text-[#262626]">
+                      {empMetrics.activeTaskCount}
+                    </span>
+                  </div>
+                  <div className="bg-white rounded-xl p-2 border border-[#EDEDED]">
+                    <span className="text-[10px] text-[#666666] block">Completed</span>
+                    <span className="text-xs font-black text-[#262626]">
+                      {empMetrics.totalTasksCompleted}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-[#1F541D] leading-tight">
+                  {empMetrics.isTopPerformer
+                    ? "Protected capacity active: Reserved 25% bandwidth to prevent high-performer burnout."
+                    : "Standard capacity active."}
+                </p>
+              </div>
+            )}
+
+            {/* Skills & Verification Management */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="text-[11px] font-bold text-[#666666] uppercase tracking-wider">
+                  Skills & Verification
+                </div>
+                {skillsLoading && <Loader2 className="w-3 h-3 animate-spin text-[#74D96F]" />}
+              </div>
+
+              {empSkills.length === 0 && selectedEmployee.skills.length === 0 ? (
                 <p className="text-xs text-[#666666]">No skills recorded yet.</p>
               ) : (
-                <ul className="grid grid-cols-2 gap-2">
-                  {selectedEmployee.skills.map((sk) => (
-                    <li key={sk.name} className="flex items-center justify-between p-2.5 rounded-2xl bg-[#F8F9FA] border border-[#EDEDED] text-xs">
-                      <span className="flex items-center space-x-1.5 font-semibold">
-                        {sk.verified && <ShieldCheck className="w-3.5 h-3.5 text-[#56BE51]" />}
-                        <span>{sk.name}</span>
-                      </span>
-                      <span className="text-[10px] text-[#666666] capitalize">{sk.proficiency}</span>
+                <ul className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {(empSkills.length > 0
+                    ? empSkills
+                    : selectedEmployee.skills.map((s, idx) => ({
+                        id: `legacy-${idx}`,
+                        skillName: s.name,
+                        proficiency: s.proficiency,
+                        verificationState: (s.verified ? "verified" : "unverified") as "verified" | "unverified" | "rejected",
+                        source: (s.verified ? "manager_review" : "cv_extraction") as "manager_review" | "cv_extraction",
+                        createdAt: "",
+                      }))
+                  ).map((sk) => (
+                    <li
+                      key={sk.id || sk.skillName}
+                      className="flex items-center justify-between p-2 rounded-xl bg-[#F8F9FA] border border-[#EDEDED] text-xs"
+                    >
+                      <div className="flex items-center space-x-1.5 min-w-0">
+                        {sk.verificationState === "verified" ? (
+                          <ShieldCheck className="w-3.5 h-3.5 text-[#56BE51] shrink-0" />
+                        ) : sk.verificationState === "rejected" ? (
+                          <XCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                        ) : (
+                          <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        )}
+                        <span className="font-semibold text-[#262626] truncate">{sk.skillName}</span>
+                        <span className="text-[9px] text-[#666666] capitalize">({sk.proficiency})</span>
+                      </div>
+
+                      <div className="flex items-center space-x-1.5 shrink-0">
+                        <span
+                          className={`text-[9px] px-1.5 py-0.5 rounded-md font-semibold uppercase ${
+                            sk.verificationState === "verified"
+                              ? "bg-[#74D96F]/20 text-[#1F541D]"
+                              : sk.verificationState === "rejected"
+                              ? "bg-rose-100 text-rose-700"
+                              : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {sk.verificationState === "verified"
+                            ? "Verified"
+                            : sk.verificationState === "rejected"
+                            ? "Rejected"
+                            : sk.source === "cv_extraction"
+                            ? "CV Extracted"
+                            : "Pending Review"}
+                        </span>
+
+                        {isAdmin && sk.verificationState === "unverified" && sk.id && !sk.id.startsWith("legacy") && (
+                          <div className="flex items-center space-x-1">
+                            <button
+                              type="button"
+                              onClick={() => handleVerifySkill(sk.id, "verified")}
+                              title="Verify skill"
+                              className="p-1 rounded-md bg-[#74D96F]/30 hover:bg-[#74D96F]/50 text-[#1F541D] cursor-pointer"
+                            >
+                              <CheckCircle2 className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleVerifySkill(sk.id, "rejected")}
+                              title="Reject skill"
+                              className="p-1 rounded-md bg-rose-100 hover:bg-rose-200 text-rose-700 cursor-pointer"
+                            >
+                              <XCircle className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </li>
                   ))}
                 </ul>
+              )}
+
+              {/* Add Skill Form */}
+              {isAdmin && (
+                <form onSubmit={handleAddSkill} className="flex items-center space-x-2 pt-1.5">
+                  <input
+                    type="text"
+                    value={newSkillName}
+                    onChange={(e) => setNewSkillName(e.target.value)}
+                    placeholder="Add verified skill (e.g. Next.js)..."
+                    className="flex-1 rounded-xl border border-[#BEBEBE]/60 bg-white px-2.5 py-1.5 text-xs text-[#262626] focus:outline-none focus:border-[#74D96F]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isAddingSkill || !newSkillName.trim()}
+                    className="px-3 py-1.5 rounded-xl bg-[#0D382E] text-white text-xs font-bold hover:bg-[#124B3E] transition disabled:opacity-50 cursor-pointer shrink-0"
+                  >
+                    {isAddingSkill ? "Adding..." : "+ Add"}
+                  </button>
+                </form>
               )}
             </div>
           </div>

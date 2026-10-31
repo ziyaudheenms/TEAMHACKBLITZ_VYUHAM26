@@ -1,0 +1,12 @@
+node_modules
+apps/web/.next
+apps/web/out
+dist
+.git
+.github
+.agents
+.env
+.env.local
+*.log
+.DS_Store
+coverage
