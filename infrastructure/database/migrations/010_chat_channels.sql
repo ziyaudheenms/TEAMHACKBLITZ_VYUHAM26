@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS channels (
     UNIQUE (organisation_id, name)
 );
 
+-- Ensure archived_at exists even if the table was created by a prior migration without it.
+ALTER TABLE channels ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+
 CREATE INDEX IF NOT EXISTS idx_channels_org_active
     ON channels (organisation_id) WHERE archived_at IS NULL;
 

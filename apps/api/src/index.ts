@@ -16,7 +16,6 @@ import meetingsRoutes from "./routes/meetings";
 import analyticsRoutes from "./routes/analytics";
 import searchRoutes from "./routes/search";
 import agentsRoutes from "./routes/agents";
-import browserJobsRoutes from "./routes/browser-jobs";
 import adminRoutes from "./routes/admin";
 import invitationsRoutes from "./routes/invitations";
 import channelsRoutes from "./routes/channels";
@@ -56,7 +55,6 @@ v1.get("/", (c) => {
       "/api/v1/notifications",
       "/api/v1/agents",
       "/api/v1/agent-executions",
-      "/api/v1/browser-jobs",
       "/api/v1/integrations",
       "/api/v1/search",
       "/api/v1/analytics",
@@ -80,7 +78,6 @@ v1.route("/meetings", meetingsRoutes);
 v1.route("/search", searchRoutes);
 v1.route("/analytics", analyticsRoutes);
 v1.route("/agents", agentsRoutes);
-v1.route("/browser-jobs", browserJobsRoutes);
 v1.route("/admin", adminRoutes);
 v1.route("/invitations", invitationsRoutes);
 v1.route("/channels", channelsRoutes);

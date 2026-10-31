@@ -200,22 +200,6 @@ export interface AgentRecord extends BaseEntity {
   allowedDomains: string[];
 }
 
-export interface BrowserJob extends BaseEntity {
-  agentId: EntityId;
-  goal: string;
-  targetUrl: string;
-  permissionLevel: BrowserPermissionLevel;
-  status:
-    | "queued"
-    | "policy_check"
-    | "running"
-    | "awaiting_approval"
-    | "completed"
-    | "failed"
-    | "cancelled";
-  evidenceUrls: string[];
-}
-
 // ---------------------------------------------------------------------------
 // 8.5 Employee Documents
 // ---------------------------------------------------------------------------

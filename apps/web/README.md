@@ -45,11 +45,6 @@ This application implements the full frontend specification defined in `IMPLEMEN
    - Foundation model configuration, system instructions, and B0-B4 permission levels.
    - Egress domain whitelist management.
 
-9. **Browser Automation & Approval Queue (`/browser-jobs`)**:
-   - Section 5 & 10.4 workflow: Autonomous Playwright execution queue.
-   - **Interactive Human-in-the-Loop Approval Drawer**: Pauses high-risk B3/B4 operations for supervisor authorization.
-   - Viewport evidence screenshot gallery and step-by-step DOM execution trace.
-
 10. **Asset Storage & Presigned URLs (`/storage`)**:
     - Zero-trust asset catalog with byte sizes and MIME types.
     - Presigned URL download trigger.

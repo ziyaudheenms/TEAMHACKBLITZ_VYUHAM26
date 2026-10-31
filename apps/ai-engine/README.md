@@ -55,8 +55,14 @@ uvicorn app.main:app --port 8000 --reload
 | `GEMINI_MODEL` | Gemini model name | `gemini-2.5-flash` |
 | `BACKEND_API_BASE_URL` | Backend Hono API base URL | `http://localhost:3001` |
 | `BACKEND_SERVICE_TOKEN` | Service-to-service bearer token | None |
+| `WEB_ALLOWED_DOMAINS` | Optional comma-separated allow-list for public pages opened by the browser tools | Any public host |
 | `AI_ENGINE_PORT` | Port for the AI Engine | `8000` |
 | `AI_ENGINE_HOST` | Host address | `0.0.0.0` |
+
+Public web research uses Bing's RSS search endpoint first and DuckDuckGo's static
+HTML endpoint as a fallback. Both are read-only and no provider credentials are
+required. If one provider rate-limits or presents a bot challenge, the engine
+automatically tries the other provider before reporting a search failure.
 
 ## Backend Integration Guide
 

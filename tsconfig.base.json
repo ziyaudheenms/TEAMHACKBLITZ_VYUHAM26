@@ -28,7 +28,6 @@
       "@bizcontext/module-notifications": ["./modules/notifications/src/index.ts"],
       "@bizcontext/module-agents": ["./modules/agents/src/index.ts"],
       "@bizcontext/module-analytics": ["./modules/analytics/src/index.ts"],
-      "@bizcontext/module-browser-jobs": ["./modules/browser-jobs/src/index.ts"],
       "@bizcontext/module-communication": ["./modules/communication/src/index.ts"],
       "@bizcontext/module-employees": ["./modules/employees/src/index.ts"],
       "@bizcontext/module-knowledge": ["./modules/knowledge/src/index.ts"],

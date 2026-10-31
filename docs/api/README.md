@@ -17,7 +17,7 @@ API routes follow RESTful conventions under `/api/v1/*`.
 - `/api/v1/notifications` - In-app alerts & preferences
 - `/api/v1/agents` - Agent registry & configuration
 - `/api/v1/agent-executions` - Agent invocation & logs
-- `/api/v1/browser-jobs` - Browser automation & approvals
+
 - `/api/v1/integrations` - Third-party connectors
 - [`/api/v1/search`](./search.md) - Hybrid keyword + vector search
 - `/api/v1/analytics` - System & operational analytics

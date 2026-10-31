@@ -198,39 +198,6 @@ export interface AgentRecord extends BaseEntity {
   successRate: number;
 }
 
-export interface BrowserJobStep {
-  stepNumber: number;
-  action: "navigate" | "click" | "input" | "extract" | "wait" | "screenshot";
-  target?: string;
-  status: "pending" | "running" | "completed" | "failed";
-  timestamp: string;
-  details?: string;
-}
-
-export interface BrowserJob extends BaseEntity {
-  agentId: EntityId;
-  agentName: string;
-  goal: string;
-  targetUrl: string;
-  permissionLevel: BrowserPermissionLevel;
-  status:
-    | "queued"
-    | "policy_check"
-    | "running"
-    | "awaiting_approval"
-    | "completed"
-    | "failed"
-    | "cancelled";
-  steps: BrowserJobStep[];
-  evidenceUrls: string[];
-  approvalRequest?: {
-    actionDescription: string;
-    riskReason: string;
-    requestedAt: string;
-  };
-  outputSummary?: string;
-}
-
 export interface AuditLogItem {
   id: string;
   actorName: string;

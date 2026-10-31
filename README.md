@@ -13,8 +13,7 @@ bizcontext-ai/
 ├── apps/
 │   ├── web/                    # Next.js 14 App Router, React, TypeScript
 │   ├── api/                    # Hono API server running on Bun
-│   ├── ai-engine/              # FastAPI: RAG, CV extraction, meeting action items
-│   └── browser-worker/         # Isolated Playwright execution worker
+│   └── ai-engine/              # FastAPI: RAG, CV extraction, meeting action items
 │
 ├── packages/
 │   ├── ui/                     # Shared UI component primitives & tokens
@@ -38,7 +37,6 @@ bizcontext-ai/
 │   ├── meetings/               # Meeting hub, minutes, OCR, AI action-item extraction
 │   ├── notifications/          # Notification centre, real-time alerts, calendar
 │   ├── agents/                 # Central agent registry, lifecycle, and review
-│   ├── browser-jobs/           # Browser automation queue, approvals, evidence logs
 │   ├── analytics/              # Project health, SLA metrics, agent reliability
 │   └── administration/         # Role definitions, organisation settings, audit logs
 │

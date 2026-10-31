@@ -260,6 +260,17 @@ async def create_task(
         org_id=ctx.deps.organisation_id,
         user_id=ctx.deps.user_id,
     )
+    if isinstance(result, dict) and "data" in result and isinstance(result["data"], dict):
+        task_data = result["data"]
+        task_id = str(task_data.get("id", ""))
+        if task_id:
+            ctx.deps.add_citation(
+                source_id=task_id,
+                title=f"Kanban Task: {title}",
+                source_type="task",
+                url=f"/projects?taskId={task_id}",
+                snippet=f"Status: {task_data.get('status', 'open')} | Priority: {task_data.get('priority', priority)}",
+            )
     ctx.deps.record_tool_call("create_task", payload, result)
     return result
 
@@ -288,6 +299,16 @@ async def update_task_status(
         org_id=ctx.deps.organisation_id,
         user_id=ctx.deps.user_id,
     )
+    if isinstance(result, dict) and ("data" in result or "id" in result):
+        task_data = result.get("data", result)
+        task_id_str = str(task_data.get("id", task_id))
+        ctx.deps.add_citation(
+            source_id=task_id_str,
+            title=f"Kanban Task: {task_data.get('title', task_id)}",
+            source_type="task",
+            url=f"/projects?taskId={task_id_str}",
+            snippet=f"Moved to: {status}",
+        )
     ctx.deps.record_tool_call("update_task_status", {"task_id": task_id, "status": status}, result)
     return result
 
@@ -330,39 +351,51 @@ async def create_ticket(
     return result
 
 
-async def dispatch_browser_job(
+async def list_tasks(
     ctx: RunContext[HarnessContext],
-    goal: str,
-    target_url: str,
-    permission_level: str = "B1",
+    project_id: Optional[str] = None,
+    status: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Submits a browser automation job to the backend browser worker.
+    """Retrieves tasks from the Kanban board, optionally filtered by project ID and/or status ('open', 'in_progress', 'in_review', 'blocked', 'done', 'cancelled').
     
     Args:
         ctx: RunContext containing execution context and backend client.
-        goal: Actionable description of the web task (e.g. 'Read latest release notes from vendor portal').
-        target_url: Target URL to open.
-        permission_level: Browser permission tier ('B0', 'B1', 'B2', 'B3', 'B4').
+        project_id: Optional UUID of the project.
+        status: Optional status column filter ('open', 'in_progress', 'in_review', 'blocked', 'done', 'cancelled').
     """
-    if not ctx.deps.is_tool_allowed("dispatch_browser_job"):
-        return {"error": "Permission denied: 'dispatch_browser_job' is not authorized."}
+    if not ctx.deps.is_tool_allowed("list_tasks"):
+        return {"error": "Permission denied: 'list_tasks' is not authorized for this agent."}
 
-    payload = {
-        "agentId": ctx.deps.agent_id or "default-browser-agent",
-        "goal": goal,
-        "targetUrl": target_url,
-        "permissionLevel": permission_level,
-        "organisationId": ctx.deps.organisation_id,
-        "createdBy": ctx.deps.user_id,
-    }
-    logger.info("Dispatching browser job for goal: %s on %s", goal, target_url)
-    result = await ctx.deps.backend_client.dispatch_browser_job(
-        job_data=payload,
+    logger.info("Listing tasks for project_id=%s status=%s", project_id, status)
+    result = await ctx.deps.backend_client.list_tasks(
+        project_id=project_id,
+        status=status,
         token=ctx.deps.auth_token,
         org_id=ctx.deps.organisation_id,
         user_id=ctx.deps.user_id,
     )
-    ctx.deps.record_tool_call("dispatch_browser_job", payload, result)
+    ctx.deps.record_tool_call("list_tasks", {"project_id": project_id, "status": status}, result)
+    return result
+
+
+async def list_projects(
+    ctx: RunContext[HarnessContext],
+) -> Dict[str, Any]:
+    """Retrieves all active projects in the workspace to discover project names and IDs.
+    
+    Args:
+        ctx: RunContext containing execution context and backend client.
+    """
+    if not ctx.deps.is_tool_allowed("list_projects"):
+        return {"error": "Permission denied: 'list_projects' is not authorized."}
+
+    logger.info("Listing projects in organisation")
+    result = await ctx.deps.backend_client.list_projects(
+        token=ctx.deps.auth_token,
+        org_id=ctx.deps.organisation_id,
+        user_id=ctx.deps.user_id,
+    )
+    ctx.deps.record_tool_call("list_projects", {}, result)
     return result
 
 
@@ -403,8 +436,9 @@ ALL_HARNESS_TOOLS = [
     search_employee_directory,
     create_task,
     update_task_status,
+    list_tasks,
+    list_projects,
     create_ticket,
-    dispatch_browser_job,
     call_backend_tool,
     web_search,
     fetch_web_page,

@@ -21,7 +21,7 @@ import { z } from "zod";
 import { getFullAuthContext, requireRole, writeAuditLog, type FullAuthContext } from "../lib/auth";
 import { getSupabaseServiceClient } from "../lib/supabase";
 import { aiEngineClient } from "../services/ai-engine.client";
-import { READ_TOOLS } from "./ai";
+import { READ_TOOLS, toolsForRole } from "./ai";
 
 const channelsRoutes = new Hono();
 
@@ -53,13 +53,25 @@ async function authorise(c: Context): Promise<{ ctx: Ctx; res: null } | { ctx: n
 async function visibleChannel(ctx: Ctx, channelId: string) {
   if (!UUID_RE.test(channelId)) return null;
   const supabase = getSupabaseServiceClient();
-  const { data: ch } = await supabase
+  const select = "id, organisation_id, name, description, is_private, created_by";
+  let { data: ch, error } = await supabase
     .from("channels")
-    .select("id, organisation_id, name, description, is_private, created_by")
+    .select(select)
     .eq("id", channelId)
     .eq("organisation_id", ctx.organisationId)
     .is("archived_at", null)
     .maybeSingle();
+  // Migration 008 did not have archived_at. Keep existing channels usable while
+  // deployments roll forward rather than treating them as nonexistent.
+  if (error && missingColumn(error.message)) {
+    ({ data: ch, error } = await supabase
+      .from("channels")
+      .select(select)
+      .eq("id", channelId)
+      .eq("organisation_id", ctx.organisationId)
+      .maybeSingle());
+  }
+  if (error) return null;
   if (!ch) return null;
   if (ch.is_private) {
     const { data: m } = await supabase
@@ -99,6 +111,7 @@ function toMessage(row: Record<string, any>) {
 }
 
 const missingTable = (message?: string) => /relation .* does not exist|schema cache/i.test(message ?? "");
+const missingColumn = (message?: string) => /column .* does not exist|schema cache/i.test(message ?? "");
 const migrationHint = "Chat is not set up yet. Apply database migration 010.";
 
 // ─── List / create ────────────────────────────────────────────────────────────
@@ -108,15 +121,22 @@ channelsRoutes.get("/", async (c) => {
   if (res) return res;
   const supabase = getSupabaseServiceClient();
 
-  const load = () =>
-    supabase
+  const load = (supportsArchive: boolean) => {
+    let query = supabase
       .from("channels")
       .select("id, name, description, is_private, created_by, created_at")
       .eq("organisation_id", ctx.organisationId)
-      .is("archived_at", null)
       .order("created_at", { ascending: true });
+    if (supportsArchive) query = query.is("archived_at", null);
+    return query;
+  };
 
-  let { data: channels, error } = await load();
+  let supportsArchive = true;
+  let { data: channels, error } = await load(supportsArchive);
+  if (error && missingColumn(error.message)) {
+    supportsArchive = false;
+    ({ data: channels, error } = await load(supportsArchive));
+  }
   if (error) return c.json(err(missingTable(error.message) ? migrationHint : error.message), 500);
 
   // First visit to a new organisation: give it a #general channel.
@@ -127,7 +147,7 @@ channelsRoutes.get("/", async (c) => {
         { organisation_id: ctx.organisationId, name: "general", description: "Company-wide announcements and chat", created_by: ctx.userId },
         { onConflict: "organisation_id,name", ignoreDuplicates: true }
       );
-    ({ data: channels, error } = await load());
+    ({ data: channels, error } = await load(supportsArchive));
     if (error) return c.json(err(error.message), 500);
   }
 
@@ -281,21 +301,33 @@ channelsRoutes.get("/:id/messages", async (c) => {
   const after = c.req.query("after");
   const supabase = getSupabaseServiceClient();
 
-  let q = supabase
-    .from("channel_messages")
-    .select("id, channel_id, sender_id, sender_name, is_ai, content, metadata, created_at")
-    .eq("channel_id", ch.id as string);
+  const loadMessages = (includeMetadata: boolean) => {
+    let query = supabase
+      .from("channel_messages")
+      .select(
+        includeMetadata
+          ? "id, channel_id, sender_id, sender_name, is_ai, content, metadata, created_at"
+          : "id, channel_id, sender_id, sender_name, is_ai, content, created_at"
+      )
+      .eq("channel_id", ch.id as string);
+    if (after) query = query.gt("created_at", after);
+    return query.order("created_at", { ascending: Boolean(after) }).limit(limit);
+  };
 
   if (after) {
     // Polling: everything newer than the last message the client has, oldest first.
     if (Number.isNaN(Date.parse(after))) return c.json(err("Invalid 'after' timestamp"), 400);
-    const { data, error } = await q.gt("created_at", after).order("created_at", { ascending: true }).limit(limit);
+    let { data, error } = await loadMessages(true);
+    // Some deployed databases still use the pre-metadata chat schema. Messages
+    // remain fully readable there; sources simply are not attached to the row.
+    if (error && missingColumn(error.message)) ({ data, error } = await loadMessages(false));
     if (error) return c.json(err("Failed to fetch messages"), 500);
     return c.json((data ?? []).map(toMessage));
   }
 
   // Initial load: the latest `limit` messages, returned oldest first.
-  const { data, error } = await q.order("created_at", { ascending: false }).limit(limit);
+  let { data, error } = await loadMessages(true);
+  if (error && missingColumn(error.message)) ({ data, error } = await loadMessages(false));
   if (error) return c.json(err(missingTable(error.message) ? migrationHint : "Failed to fetch messages"), 500);
   return c.json((data ?? []).reverse().map(toMessage));
 });
@@ -316,7 +348,8 @@ channelsRoutes.post("/:id/messages", async (c) => {
   if (!parsed.success) return c.json(err("Message must be 1-4000 characters"), 400);
 
   const supabase = getSupabaseServiceClient();
-  const { data: row, error } = await supabase
+  const messageSelect = "id, channel_id, sender_id, sender_name, is_ai, content, metadata, created_at";
+  let { data: row, error } = await supabase
     .from("channel_messages")
     .insert({
       organisation_id: ctx.organisationId,
@@ -326,8 +359,23 @@ channelsRoutes.post("/:id/messages", async (c) => {
       is_ai: false,
       content: parsed.data.content,
     })
-    .select("id, channel_id, sender_id, sender_name, is_ai, content, metadata, created_at")
+    .select(messageSelect)
     .single();
+  // The legacy chat table has neither organisation_id nor metadata. Its channel
+  // foreign key still scopes messages safely, so use that compatible shape.
+  if (error && missingColumn(error.message)) {
+    ({ data: row, error } = await supabase
+      .from("channel_messages")
+      .insert({
+        channel_id: ch.id,
+        sender_id: ctx.userId,
+        sender_name: ctx.name,
+        is_ai: false,
+        content: parsed.data.content,
+      })
+      .select("id, channel_id, sender_id, sender_name, is_ai, content, created_at")
+      .single());
+  }
   if (error || !row) return c.json(err("Could not send the message"), 500);
 
   const mentioned = MENTION_RE.test(parsed.data.content);
@@ -349,7 +397,8 @@ async function insertCopilotMessage(
   invokedBy: string,
   sources?: Array<{ title: string; url?: string; type: string }>
 ) {
-  await getSupabaseServiceClient()
+  const supabase = getSupabaseServiceClient();
+  const { error } = await supabase
     .from("channel_messages")
     .insert({
       organisation_id: ctx.organisationId,
@@ -361,6 +410,17 @@ async function insertCopilotMessage(
       content: content.slice(0, 8000),
       metadata: sources?.length ? { sources } : null,
     });
+  if (error && missingColumn(error.message)) {
+    // sender_id was non-nullable before migration 010. Attribute a legacy AI
+    // response to the invoking user while retaining the explicit AI flag/name.
+    await supabase.from("channel_messages").insert({
+      channel_id: channelId,
+      sender_id: invokedBy,
+      sender_name: COPILOT_NAME,
+      is_ai: true,
+      content: content.slice(0, 8000),
+    });
+  }
 }
 
 async function answerAsCopilot(ctx: Ctx, channelId: string, text: string, token?: string) {
@@ -388,17 +448,33 @@ async function answerAsCopilot(ctx: Ctx, channelId: string, text: string, token?
 
     const prompt = text.replace(/@bizcontext\b/gi, "").trim() || text;
     try {
+      const allowedTools = toolsForRole(ctx.role);
       const result = await aiEngineClient.runAgent({
         prompt,
         userId: ctx.userId,
         organisationId: ctx.organisationId,
         agentRole: "channel_assistant",
-        // Read-only: a shared channel must not let one mention trigger writes.
-        allowedTools: READ_TOOLS,
+        // The copilot acts with the caller's role permissions (e.g. member+ can create/update tasks)
+        allowedTools,
         chatHistory: history,
         metadata: { channelId, callerRole: ctx.role },
         authToken: token,
       });
+
+      // Audit any consequential write tools executed via the channel copilot
+      const writes = (result.tool_calls ?? []).filter((t) => !READ_TOOLS.includes(t.tool_name));
+      if (writes.length) {
+        await writeAuditLog({
+          organisationId: ctx.organisationId,
+          actorId: ctx.userId,
+          actorType: "agent",
+          action: "ai.tool_execution",
+          resourceType: "channel_message",
+          resourceId: channelId,
+          metadata: { channelId, tools: writes.map((t) => ({ name: t.tool_name, status: t.status })) },
+        });
+      }
+
       const sources = (result.citations ?? []).slice(0, 6).map((ci) => ({
         title: ci.title,
         url: ci.url,

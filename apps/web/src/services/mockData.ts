@@ -10,7 +10,6 @@ import {
   ChatMessage,
   ChatChannel,
   AgentRecord,
-  BrowserJob,
   StoredFile,
   AuditLogItem,
 } from "../types";
@@ -731,77 +730,6 @@ export const initialAgents: AgentRecord[] = [
   },
 ];
 
-export const initialBrowserJobs: BrowserJob[] = [
-  {
-    id: "bjob-1",
-    organisationId: "org-1",
-    createdBy: "emp-1",
-    createdAt: "2026-10-30T14:15:00Z",
-    updatedAt: "2026-10-30T14:18:00Z",
-    agentId: "ag-2",
-    agentName: "Autonomous Browser Worker",
-    goal: "Verify AWS monthly cost breakdown and download October invoice PDF",
-    targetUrl: "https://portal.aws.amazon.com/billing/home",
-    permissionLevel: "B3",
-    status: "awaiting_approval",
-    steps: [
-      { stepNumber: 1, action: "navigate", target: "https://portal.aws.amazon.com/billing/home", status: "completed", timestamp: "14:15:22", details: "Loaded AWS Billing Dashboard with HTTP 200" },
-      { stepNumber: 2, action: "extract", target: "#billing-total-cost-panel", status: "completed", timestamp: "14:16:05", details: "Extracted current month total: $1,420.50" },
-      { stepNumber: 3, action: "click", target: "button#download-pdf-invoice", status: "running", timestamp: "14:17:10", details: "Paused at critical action: Downloading corporate financial PDF" },
-    ],
-    evidenceUrls: [
-      "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=600&auto=format&fit=crop&q=80",
-    ],
-    approvalRequest: {
-      actionDescription: "Download and decrypt corporate AWS invoice PDF for billing period 2026-10",
-      riskReason: "High Sensitivity: Financial document export requires explicit B3 supervisor confirmation",
-      requestedAt: "2026-10-30T14:17:10Z",
-    },
-    outputSummary: "Current charges extracted successfully. Waiting for supervisor approval to finalize PDF export.",
-  },
-  {
-    id: "bjob-2",
-    organisationId: "org-1",
-    createdBy: "emp-3",
-    createdAt: "2026-10-30T13:30:00Z",
-    updatedAt: "2026-10-30T13:33:00Z",
-    agentId: "ag-2",
-    agentName: "Autonomous Browser Worker",
-    goal: "Inspect public GitHub release notes for Playwright v1.49 updates",
-    targetUrl: "https://github.com/microsoft/playwright/releases",
-    permissionLevel: "B1",
-    status: "completed",
-    steps: [
-      { stepNumber: 1, action: "navigate", target: "https://github.com/microsoft/playwright/releases", status: "completed", timestamp: "13:30:12", details: "Navigated to GitHub releases page" },
-      { stepNumber: 2, action: "extract", target: ".release-entry", status: "completed", timestamp: "13:31:04", details: "Extracted release notes for v1.49.1" },
-      { stepNumber: 3, action: "screenshot", target: "viewport", status: "completed", timestamp: "13:32:15", details: "Captured full-page evidence screenshot" },
-    ],
-    evidenceUrls: [
-      "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&auto=format&fit=crop&q=80",
-    ],
-    outputSummary: "Playwright v1.49 includes updated CDP trace recording and faster locator resolution. No breaking API changes detected.",
-  },
-  {
-    id: "bjob-3",
-    organisationId: "org-1",
-    createdBy: "emp-5",
-    createdAt: "2026-10-30T14:35:00Z",
-    updatedAt: "2026-10-30T14:36:00Z",
-    agentId: "ag-2",
-    agentName: "Autonomous Browser Worker",
-    goal: "Verify status page for OpenAI API uptime and incident history",
-    targetUrl: "https://status.openai.com",
-    permissionLevel: "B1",
-    status: "running",
-    steps: [
-      { stepNumber: 1, action: "navigate", target: "https://status.openai.com", status: "completed", timestamp: "14:35:10", details: "Connected to Statuspage" },
-      { stepNumber: 2, action: "wait", target: "500ms", status: "completed", timestamp: "14:35:20", details: "Waiting for DOM hydration" },
-      { stepNumber: 3, action: "extract", target: ".component-container", status: "running", timestamp: "14:36:01", details: "Reading API operational metrics..." },
-    ],
-    evidenceUrls: [],
-    outputSummary: "In progress: reading status metrics.",
-  },
-];
 
 export const initialFiles: StoredFile[] = [
   {

@@ -277,27 +277,50 @@ class BackendClient:
             logger.warning("Failed to create ticket: %s", exc)
             return {"error": f"Backend request error: {str(exc)}"}
 
-    async def dispatch_browser_job(
+    async def list_tasks(
         self,
-        job_data: Dict[str, Any],
+        project_id: Optional[str] = None,
+        status: Optional[str] = None,
         token: Optional[str] = None,
         org_id: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Submits a browser automation job to the backend browser orchestrator."""
+        """Fetches tasks from the backend, optionally filtered by project_id and status."""
+        client = await self.get_client()
+        headers = self._build_headers(token=token, org_id=org_id, user_id=user_id)
+        params: Dict[str, Any] = {}
+        if project_id:
+            params["projectId"] = project_id
+        try:
+            response = await client.get("/api/v1/tasks", params=params, headers=headers)
+            if response.status_code == 200:
+                res_data = response.json()
+                if status and isinstance(res_data, dict) and "data" in res_data and isinstance(res_data["data"], list):
+                    filtered = [t for t in res_data["data"] if str(t.get("status", "")).lower() == status.lower()]
+                    return {"data": filtered}
+                return res_data
+            return {"tasks": [], "error": f"Failed to list tasks (status {response.status_code})"}
+        except httpx.RequestError as exc:
+            logger.warning("Failed to list tasks: %s", exc)
+            return {"tasks": [], "error": f"Backend request error: {str(exc)}"}
+
+    async def list_projects(
+        self,
+        token: Optional[str] = None,
+        org_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Fetches active projects from the backend."""
         client = await self.get_client()
         headers = self._build_headers(token=token, org_id=org_id, user_id=user_id)
         try:
-            response = await client.post("/api/v1/browser-jobs", json=job_data, headers=headers)
-            if response.status_code in (200, 201):
+            response = await client.get("/api/v1/projects", headers=headers)
+            if response.status_code == 200:
                 return response.json()
-            return {
-                "error": f"Failed to dispatch browser job (status {response.status_code})",
-                "detail": response.text,
-            }
+            return {"projects": [], "error": f"Failed to list projects (status {response.status_code})"}
         except httpx.RequestError as exc:
-            logger.warning("Failed to dispatch browser job: %s", exc)
-            return {"error": f"Backend request error: {str(exc)}"}
+            logger.warning("Failed to list projects: %s", exc)
+            return {"projects": [], "error": f"Backend request error: {str(exc)}"}
 
     async def execute_tool(
         self,

@@ -88,7 +88,7 @@ function Nav() {
 
   return (
     <header className={`fixed top-0 left-0 right-0 z-50 bg-white transition-shadow duration-200 ${scrolled ? "shadow-[0_1px_0_#e8e8e8]" : "border-b border-[#ebebeb]"}`}>
-      <div className="max-w-[1180px] mx-auto px-6 h-[52px] flex items-center justify-between">
+      <div className="max-w-[1180px] mx-auto px-4 sm:px-6 h-[52px] flex items-center justify-between">
 
         {/* Logo — matches Agno angular icon + wordmark */}
         <Link href="/" className="flex items-center gap-2 group">
@@ -116,11 +116,11 @@ function Nav() {
         </nav>
 
         {/* Right CTA pair */}
-        <div className="flex items-center gap-2">
-          <Link href="/login" className="px-4 py-1.5 text-[0.8125rem] font-semibold text-[#333] border border-[#ccc] rounded-md hover:border-[#aaa] hover:text-[#1a1a1a] transition-all tracking-wide uppercase">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <Link href="/login" className="px-3 sm:px-4 py-1.5 text-[0.75rem] sm:text-[0.8125rem] font-semibold text-[#333] border border-[#ccc] rounded-md hover:border-[#aaa] hover:text-[#1a1a1a] transition-all tracking-wide uppercase">
             Login
           </Link>
-          <Link href="/dashboard" className="px-4 py-1.5 text-[0.8125rem] font-semibold text-white rounded-md transition-all tracking-wide uppercase hover:opacity-90" style={{ backgroundColor: "#74D96F", color: "#1a1a1a" }}>
+          <Link href="/dashboard" className="px-3 sm:px-4 py-1.5 text-[0.75rem] sm:text-[0.8125rem] font-semibold text-white rounded-md transition-all tracking-wide uppercase hover:opacity-90" style={{ backgroundColor: "#74D96F", color: "#1a1a1a" }}>
             Sign Up
           </Link>
         </div>
@@ -189,24 +189,23 @@ export default function LandingPage() {
         />
 
         {/* ── Content grid ── */}
-        <div className="relative max-w-[1180px] mx-auto px-6 flex flex-col lg:flex-row items-start lg:items-center h-full" style={{ minHeight: "calc(100vh - 52px)" }}>
+        <div className="relative max-w-[1180px] mx-auto px-4 sm:px-6 flex flex-col lg:flex-row items-start lg:items-center h-full min-h-[calc(100vh-52px)]">
 
           {/* ── LEFT: Hero text ── */}
           <div
-            className="relative z-10 flex-none lg:w-[42%] pt-20 lg:pt-0 pb-12 lg:pb-0"
+            className="relative z-10 flex-none w-full lg:w-[42%] pt-12 sm:pt-16 lg:pt-0 pb-8 lg:pb-0"
             style={{ opacity: vis ? 1 : 0, transform: vis ? "none" : "translateY(20px)", transition: "opacity 0.6s ease, transform 0.6s ease" }}
           >
             {/* Massive headline — Agno style: plain black, two lines */}
             <h1
-              className="font-extrabold text-[#0d0d0d] leading-[1.08] tracking-[-0.035em] mb-5"
-              style={{ fontSize: "clamp(2.5rem, 4.5vw, 3.5rem)" }}
+              className="font-extrabold text-[#0d0d0d] leading-[1.08] tracking-[-0.035em] mb-5 text-3xl sm:text-4xl md:text-5xl lg:text-[3.5rem]"
             >
               Build your own<br />
               <span className="text-[#74D96F]">AI workspace</span>
             </h1>
 
             {/* Body — Agno style: small, gray, tight */}
-            <p className="text-[#555] text-[0.9375rem] leading-[1.65] mb-8 max-w-[340px]">
+            <p className="text-[#555] text-[0.9375rem] leading-[1.65] mb-8 max-w-md lg:max-w-[340px]">
               BizContext is a self-driving AI workspace that runs in your org. Build intelligent agents, automate operations, and let your team move at the speed of thought.
             </p>
 
@@ -227,8 +226,6 @@ export default function LandingPage() {
           </div>
 
           {/* ── RIGHT: App Screenshot — Agno style ── */}
-          {/* Agno places the screenshot flush to the right edge, no container padding,
-              dark background, slightly overflowing top */}
           <div
             className="flex-1 relative lg:absolute lg:right-0 lg:top-0 lg:bottom-0 flex items-start lg:items-center w-full lg:w-auto"
             style={{
@@ -237,27 +234,20 @@ export default function LandingPage() {
               transition: "opacity 0.75s ease 0.12s, transform 0.75s ease 0.12s",
             }}
           >
-            {/* The screenshot panel — dark frame, no browser chrome (Agno style) */}
+            {/* The screenshot panel — dark frame, responsive width */}
             <div
-              className="relative w-full lg:w-auto ml-auto"
-              style={{
-                marginTop: "52px",   /* just below nav */
-                width: "clamp(420px, 58vw, 720px)",
-              }}
+              className="relative w-full max-w-[720px] lg:w-[clamp(420px,58vw,720px)] ml-auto mt-6 lg:mt-[52px] mb-12 lg:mb-0"
             >
               {/* Outer dark rounded frame */}
               <div
-                className="overflow-hidden"
+                className="overflow-hidden rounded-2xl lg:rounded-r-none border border-[#2a2a2a] lg:border-r-0"
                 style={{
-                  borderRadius: "12px 0 0 12px",
                   boxShadow: "-24px 24px 80px rgba(0,0,0,0.22), -4px 0 40px rgba(0,0,0,0.12)",
-                  border: "1px solid #2a2a2a",
-                  borderRight: "none",
                 }}
               >
                 {/* Dark title bar — matches Agno's dark app chrome */}
                 <div className="flex items-center gap-2 px-4 py-2.5 bg-[#1c1c1c] border-b border-[#303030]">
-                  <div className="flex gap-1.5">
+                  <div className="flex gap-1.5 shrink-0">
                     <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
                     <div className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
                     <div className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
@@ -282,10 +272,10 @@ export default function LandingPage() {
                 />
               </div>
 
-              {/* Floating status pill — Agno style subtle badge */}
-              <div className="absolute -bottom-5 left-6 bg-white border border-[#e8e8e8] rounded-full px-3.5 py-1.5 flex items-center gap-2 shadow-[0_4px_24px_rgba(0,0,0,0.1)]">
+              {/* Floating status pill — subtle badge */}
+              <div className="absolute -bottom-4 left-4 sm:left-6 bg-white border border-[#e8e8e8] rounded-full px-3 py-1 sm:px-3.5 sm:py-1.5 flex items-center gap-2 shadow-[0_4px_24px_rgba(0,0,0,0.1)]">
                 <div className="w-2 h-2 rounded-full bg-[#74D96F] animate-pulse" />
-                <span className="text-[11px] font-semibold text-[#444]">4 agents running now</span>
+                <span className="text-[10px] sm:text-[11px] font-semibold text-[#444]">4 agents running now</span>
               </div>
             </div>
           </div>
@@ -468,14 +458,14 @@ export default function LandingPage() {
                 <p className="text-[0.8125rem] text-[#666] leading-relaxed mb-5">Agents are stateful, distributed services that are hard to run well. Our platform handles that so your team ships features.</p>
                 {/* Pricing rows */}
                 <div className="rounded-xl border border-[#f0f0f0] overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#f0f0f0]">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b border-[#f0f0f0]">
                     <div>
                       <span className="text-[1.75rem] font-extrabold text-[#1a1a1a] leading-none">$0</span>
                       <div className="text-[11px] text-[#888] font-medium mt-0.5">hidden bills</div>
                     </div>
-                    <div className="space-y-1.5 text-right">
+                    <div className="space-y-1.5 text-left sm:text-right">
                       {[["Storage","Unlimited"],["Retention","Unlimited"],["Audit Logs","Unlimited"]].map(([k,v]) => (
-                        <div key={k} className="flex items-center gap-3 text-[0.8125rem]">
+                        <div key={k} className="flex items-center sm:justify-end gap-3 text-[0.8125rem]">
                           <span className="text-[#888]">{k}</span>
                           <span className="font-bold text-[#74D96F]">{v}</span>
                           <CheckCircle2 className="w-3.5 h-3.5 text-[#74D96F]" />
@@ -497,30 +487,35 @@ export default function LandingPage() {
               <div className="flex-1 p-6 pb-0">
                 {/* Search bar */}
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#e8e8e8] bg-[#fafaf8] mb-4 text-[0.8125rem] text-[#aaa]">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                  Search policies, roles, permissions…
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                  <span className="truncate">Search policies, roles, permissions…</span>
                 </div>
-                {/* Table header */}
-                <div className="grid grid-cols-3 text-[10px] font-bold text-[#aaa] uppercase tracking-widest px-3 mb-2">
-                  <span>Resource</span><span>Type</span><span>Access</span>
-                </div>
-                {/* Table rows */}
-                {[
-                  { name: "Knowledge Base", icon: <Brain className="w-3.5 h-3.5 text-[#74D96F]"/>, type: "Role", access: "READ", color: "text-[#555]" },
-                  { name: "Agent Registry", icon: <Bot className="w-3.5 h-3.5 text-[#75A0C9]"/>, type: "Scope", access: "WRITE", color: "text-[#F09363]" },
-                  { name: "Audit Logs", icon: <BarChart3 className="w-3.5 h-3.5 text-[#F09363]"/>, type: "Policy", access: "ADMIN", color: "text-[#ED6B2D]" },
-                  { name: "Browser Jobs", icon: <Globe className="w-3.5 h-3.5 text-[#666]"/>, type: "Role", access: "APPROVE", color: "text-[#75A0C9]" },
-                ].map((row, i) => (
-                  <div key={i} className={`grid grid-cols-3 items-center px-3 py-2.5 rounded-lg text-[0.8125rem] mb-1 ${i === 1 ? "bg-[#fafaf8] border border-[#f0f0f0]" : ""}`}>
-                    <div className="flex items-center gap-2">
-                      <input type="checkbox" readOnly className="w-3.5 h-3.5 rounded accent-[#74D96F]" checked={i === 1} />
-                      {row.icon}
-                      <span className="font-medium text-[#1a1a1a] truncate">{row.name}</span>
+                {/* Table wrapper */}
+                <div className="overflow-x-auto -mx-2 px-2">
+                  <div className="min-w-[280px]">
+                    {/* Table header */}
+                    <div className="grid grid-cols-3 text-[10px] font-bold text-[#aaa] uppercase tracking-widest px-3 mb-2">
+                      <span>Resource</span><span>Type</span><span>Access</span>
                     </div>
-                    <span className="text-[#888]">{row.type}</span>
-                    <span className={`font-bold text-xs ${row.color}`}>{row.access}</span>
+                    {/* Table rows */}
+                    {[
+                      { name: "Knowledge Base", icon: <Brain className="w-3.5 h-3.5 text-[#74D96F] shrink-0"/>, type: "Role", access: "READ", color: "text-[#555]" },
+                      { name: "Agent Registry", icon: <Bot className="w-3.5 h-3.5 text-[#75A0C9] shrink-0"/>, type: "Scope", access: "WRITE", color: "text-[#F09363]" },
+                      { name: "Audit Logs", icon: <BarChart3 className="w-3.5 h-3.5 text-[#F09363] shrink-0"/>, type: "Policy", access: "ADMIN", color: "text-[#ED6B2D]" },
+                      { name: "Browser Jobs", icon: <Globe className="w-3.5 h-3.5 text-[#666] shrink-0"/>, type: "Role", access: "APPROVE", color: "text-[#75A0C9]" },
+                    ].map((row, i) => (
+                      <div key={i} className={`grid grid-cols-3 items-center px-3 py-2.5 rounded-lg text-[0.8125rem] mb-1 ${i === 1 ? "bg-[#fafaf8] border border-[#f0f0f0]" : ""}`}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <input type="checkbox" readOnly className="w-3.5 h-3.5 rounded accent-[#74D96F] shrink-0" checked={i === 1} />
+                          {row.icon}
+                          <span className="font-medium text-[#1a1a1a] truncate">{row.name}</span>
+                        </div>
+                        <span className="text-[#888] truncate">{row.type}</span>
+                        <span className={`font-bold text-xs ${row.color}`}>{row.access}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
               </div>
               {/* Description footer */}
               <div className="p-6 pt-5 border-t border-[#f0f0f0] mt-4">

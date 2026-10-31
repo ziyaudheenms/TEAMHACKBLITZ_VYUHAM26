@@ -27,9 +27,7 @@ Queries the AI engine (pgvector embeddings + BM25 keyword index) to answer natur
       "link": "/knowledge"
     }
   ],
-  "suggestedActions": [
-    { "label": "View Browser Approval Queue", "actionType": "navigate", "payload": "/browser-jobs" }
-  ]
+  "suggestedActions": []
 }
 ```
 

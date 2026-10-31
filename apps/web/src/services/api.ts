@@ -10,7 +10,6 @@ import type {
   ChatMessage,
   ChatChannel,
   AgentRecord,
-  BrowserJob,
   StoredFile,
   AppNotification,
   NotificationPreferences,
@@ -163,8 +162,6 @@ class ApiService {
       typeof window !== "undefined" && localStorage.getItem("bizcontext_api_url")
         ? localStorage.getItem("bizcontext_api_url")!
         : process.env.NEXT_PUBLIC_API_URL || "/api/v1";
-
-    this.initStore();
   }
 
   // --- Connection status ---------------------------------------------------------
@@ -804,29 +801,6 @@ class ApiService {
 
   public updateAgentStatus(agentId: string, status: AgentRecord["status"]): Promise<AgentRecord> {
     return this.call<AgentRecord>(`/agents/${agentId}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
-  }
-
-  public getBrowserJobs(): Promise<BrowserJob[]> {
-    return this.call<BrowserJob[]>("/browser-jobs");
-  }
-
-  public createBrowserJob(data: Partial<BrowserJob>): Promise<BrowserJob> {
-    return this.call<BrowserJob>("/browser-jobs", {
-      method: "POST",
-      body: JSON.stringify({
-        agentId: data.agentId || undefined,
-        goal: data.goal,
-        targetUrl: data.targetUrl,
-        permissionLevel: data.permissionLevel ?? "B1",
-      }),
-    });
-  }
-
-  public approveBrowserJob(jobId: string, decision: "approved" | "rejected", note?: string): Promise<BrowserJob> {
-    return this.call<BrowserJob>(`/browser-jobs/${jobId}/approve`, {
-      method: "POST",
-      body: JSON.stringify({ approved: decision === "approved", note }),
-    });
   }
 
   // --- Files ---------------------------------------------------------------------------------------

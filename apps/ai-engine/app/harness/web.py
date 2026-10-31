@@ -21,6 +21,7 @@ import socket
 from html.parser import HTMLParser
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, unquote, urljoin, urlparse
+from xml.etree import ElementTree
 
 import httpx
 from pydantic_ai import RunContext
@@ -35,6 +36,9 @@ _MAX_REDIRECTS = 3
 _MAX_TEXT_CHARS = 8000
 _ALLOWED_TYPES = ("text/html", "text/plain", "application/xhtml+xml", "application/json", "text/xml", "application/xml")
 _SKIP_TAGS = {"script", "style", "noscript", "svg", "nav", "footer", "header", "form", "iframe"}
+_SEARCH_TIMEOUT = httpx.Timeout(10.0)
+_BING_RSS_SEARCH_URL = "https://www.bing.com/search"
+_DUCKDUCKGO_SEARCH_URL = "https://html.duckduckgo.com/html/"
 
 
 class UnsafeURL(ValueError):
@@ -217,18 +221,101 @@ class _DDGParser(HTMLParser):
             self._cur = {}
 
 
-async def search_web(query: str, limit: int = 5) -> Dict[str, Any]:
-    """Keyless public web search. Returns an error dict (not an exception) on failure."""
+def _parse_bing_rss(payload: str) -> List[Dict[str, str]]:
+    """Extract result records from Bing's RSS search response.
+
+    RSS is intentionally used instead of scraping Bing's rendered results page: it
+    has a compact, stable structure and keeps the search response bounded.
+    """
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0), headers={"User-Agent": _USER_AGENT}) as client:
-            resp = await client.post("https://html.duckduckgo.com/html/", data={"q": query})
-        if resp.status_code != 200:
-            return {"query": query, "results": [], "error": f"Search provider returned HTTP {resp.status_code}."}
-        parser = _DDGParser()
-        parser.feed(resp.text)
-        return {"query": query, "results": parser.results[: max(1, min(limit, 10))], "untrusted_content": True}
+        root = ElementTree.fromstring(payload)
+    except ElementTree.ParseError:
+        return []
+
+    results: List[Dict[str, str]] = []
+    for item in root.findall(".//item"):
+        title = " ".join("".join(item.findtext("title") or "").split())
+        url = (item.findtext("link") or "").strip()
+        snippet = " ".join("".join(item.findtext("description") or "").split())
+        if title and urlparse(url).scheme in ("http", "https"):
+            results.append({"title": title, "url": url, "snippet": snippet})
+    return results
+
+
+async def _search_bing(client: httpx.AsyncClient, query: str) -> Dict[str, Any]:
+    """Search Bing's RSS endpoint and return the normalized result shape."""
+    try:
+        response = await client.get(
+            _BING_RSS_SEARCH_URL,
+            params={"q": query, "format": "rss"},
+            headers={"Accept": "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8"},
+        )
     except httpx.HTTPError as exc:
-        return {"query": query, "results": [], "error": f"Search failed: {exc.__class__.__name__}"}
+        return {"provider": "Bing", "error": f"request failed ({exc.__class__.__name__})"}
+
+    if response.status_code != 200:
+        return {"provider": "Bing", "error": f"returned HTTP {response.status_code}"}
+
+    results = _parse_bing_rss(response.text)
+    if not results:
+        return {"provider": "Bing", "error": "returned no parseable results"}
+    return {"provider": "Bing", "results": results}
+
+
+async def _search_duckduckgo(client: httpx.AsyncClient, query: str) -> Dict[str, Any]:
+    """Fallback provider for when Bing is temporarily unavailable."""
+    try:
+        response = await client.post(_DUCKDUCKGO_SEARCH_URL, data={"q": query})
+    except httpx.HTTPError as exc:
+        return {"provider": "DuckDuckGo", "error": f"request failed ({exc.__class__.__name__})"}
+
+    # DuckDuckGo serves HTTP 202 when it presents its bot challenge instead of
+    # search results. Treat it as an unavailable provider, never as an empty
+    # successful search.
+    if response.status_code != 200:
+        return {"provider": "DuckDuckGo", "error": f"returned HTTP {response.status_code}"}
+    if "anomaly-modal" in response.text:
+        return {"provider": "DuckDuckGo", "error": "presented an anti-bot challenge"}
+
+    parser = _DDGParser()
+    parser.feed(response.text)
+    if not parser.results:
+        return {"provider": "DuckDuckGo", "error": "returned no parseable results"}
+    return {"provider": "DuckDuckGo", "results": parser.results}
+
+
+async def search_web(query: str, limit: int = 5) -> Dict[str, Any]:
+    """Keyless public web search with a provider fallback.
+
+    A provider failure is reported only after the fallback is exhausted. This is
+    important because anonymous search endpoints can temporarily rate-limit or
+    challenge automated requests without the browser tool itself being broken.
+    """
+    clean_query = " ".join(query.split())
+    if not clean_query:
+        return {"query": query, "results": [], "error": "A non-empty search query is required."}
+
+    capped_limit = max(1, min(limit, 10))
+    attempts: List[Dict[str, Any]] = []
+    async with httpx.AsyncClient(timeout=_SEARCH_TIMEOUT, headers={"User-Agent": _USER_AGENT}) as client:
+        for provider in (_search_bing, _search_duckduckgo):
+            attempt = await provider(client, clean_query)
+            attempts.append(attempt)
+            if results := attempt.get("results"):
+                return {
+                    "query": clean_query,
+                    "results": results[:capped_limit],
+                    "provider": attempt["provider"],
+                    "untrusted_content": True,
+                }
+
+    errors = "; ".join(f"{attempt['provider']}: {attempt['error']}" for attempt in attempts)
+    logger.warning("All web search providers failed for query=%r: %s", clean_query, errors)
+    return {
+        "query": clean_query,
+        "results": [],
+        "error": f"Public web search is temporarily unavailable ({errors}).",
+    }
 
 
 # ---------------------------------------------------------------------------

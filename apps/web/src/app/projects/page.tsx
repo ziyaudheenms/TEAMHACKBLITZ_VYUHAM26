@@ -59,6 +59,7 @@ export default function ProjectsKanbanPage() {
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null);
 
   // Loading / error state
   const [isLoading, setIsLoading] = useState(true);
@@ -70,6 +71,8 @@ export default function ProjectsKanbanPage() {
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [taskFormError, setTaskFormError] = useState<string | null>(null);
   const [projectFormError, setProjectFormError] = useState<string | null>(null);
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dropTargetStatus, setDropTargetStatus] = useState<Task["status"] | null>(null);
 
   // Form states for new task
   const [taskTitle, setTaskTitle] = useState("");
@@ -110,6 +113,22 @@ export default function ProjectsKanbanPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Read ?taskId= from URL to highlight card when navigated from AI chat
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tid = params.get("taskId");
+      if (tid) {
+        setHighlightedTaskId(tid);
+        const timer = setTimeout(() => {
+          const el = document.getElementById(`task-card-${tid}`);
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [tasks]);
 
   // If the selected project disappears after a reload, fall back to "all".
   useEffect(() => {
@@ -169,6 +188,29 @@ export default function ProjectsKanbanPage() {
     } finally {
       setPending(taskId, false);
     }
+  };
+
+  const handleTaskDragStart = (event: React.DragEvent<HTMLDivElement>, task: Task) => {
+    if (pendingTaskIds.has(task.id)) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", task.id);
+    setDraggedTaskId(task.id);
+    setActionError(null);
+  };
+
+  const finishTaskDrag = () => {
+    setDraggedTaskId(null);
+    setDropTargetStatus(null);
+  };
+
+  const handleTaskDrop = (event: React.DragEvent<HTMLDivElement>, status: Task["status"]) => {
+    event.preventDefault();
+    const taskId = event.dataTransfer.getData("text/plain") || draggedTaskId;
+    finishTaskDrag();
+    if (taskId) void handleStatusChange(taskId, status);
   };
 
   const openTaskModal = () => {
@@ -244,36 +286,51 @@ export default function ProjectsKanbanPage() {
 
   return (
     <div className="space-y-6">
-      {/* Top Controls Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#EDEDED]">
-        <div>
-          <h1 className="text-xl md:text-2xl font-bold text-[#262626] flex items-center space-x-2">
-            <FolderKanban className="w-6 h-6 text-[#74D96F]" />
-            <span>Projects & Kanban Operations</span>
-          </h1>
-          <p className="text-xs text-[#666666] mt-0.5">
-            Cross-functional initiative tracking, task assignment, and milestone delivery.
-          </p>
+      {/* Top Controls Header matching screenshot aesthetic */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#E8ECE9]">
+        <div className="flex items-center space-x-3.5">
+          <div className="w-10 h-10 rounded-2xl bg-[#74D96F]/15 border border-[#74D96F]/30 flex items-center justify-center text-[#1F541D] shadow-xs shrink-0">
+            <FolderKanban className="w-5 h-5 text-[#56BE51]" />
+          </div>
+          <div>
+            <div className="text-[10px] font-extrabold tracking-widest text-[#56BE51] uppercase mb-0.5">
+              PROJECTS & KANBAN
+            </div>
+            <h1 className="text-xl md:text-2xl font-black text-[#262626] tracking-tight">
+              Projects & Kanban Operations
+            </h1>
+            <p className="text-xs text-[#666666]">
+              Interactive 5-column Kanban board • Real-time task dispatching • Cross-functional initiative delivery
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2.5">
+          <button
+            onClick={() => void load()}
+            disabled={isLoading}
+            aria-label="Refresh projects"
+            className="p-2.5 rounded-full border border-[#DCE4E0] bg-white hover:bg-[#EDEDED] text-[#52665F] transition disabled:opacity-50 cursor-pointer shadow-2xs"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+          </button>
           <button
             onClick={() => {
               setProjectFormError(null);
               setIsProjectModalOpen(true);
             }}
             disabled={isLoading || !!loadError}
-            className="px-4 py-2 rounded-full bg-[#EDEDED] hover:bg-[#E2E2E2] text-[#262626] text-xs font-semibold border border-[#BEBEBE]/40 shadow-xs transition disabled:opacity-50"
+            className="px-4 py-2.5 rounded-full bg-white hover:bg-[#F8FAF9] text-[#262626] text-xs font-bold border border-[#DCE4E0] hover:border-[#74D96F] shadow-2xs transition disabled:opacity-50 cursor-pointer"
           >
             + New Project
           </button>
           <button
             onClick={openTaskModal}
             disabled={isLoading || !!loadError}
-            className="px-4 py-2 rounded-full bg-[#74D96F] hover:bg-[#62CE5C] text-[#262626] text-xs font-bold shadow-sm transition flex items-center space-x-1.5 disabled:opacity-50"
+            className="px-5 py-2.5 rounded-full bg-[#0D382E] hover:bg-[#124B3E] active:scale-95 text-white text-xs font-bold shadow-md shadow-[#0D382E]/25 transition-all flex items-center space-x-2 disabled:opacity-50 cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
-            <span>New Task</span>
+            <Plus className="w-4 h-4 text-[#74D96F]" />
+            <span>Create Task</span>
           </button>
         </div>
       </div>
@@ -441,7 +498,19 @@ export default function ProjectsKanbanPage() {
               return (
                 <div
                   key={col.id}
-                  className={`w-[85vw] sm:w-[320px] md:w-auto shrink-0 snap-center rounded-2xl border ${col.color} p-3.5 flex flex-col min-h-[480px] shadow-xs`}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                    setDropTargetStatus(col.id);
+                  }}
+                  onDragLeave={(event) => {
+                    if (event.currentTarget === event.target) setDropTargetStatus(null);
+                  }}
+                  onDrop={(event) => handleTaskDrop(event, col.id)}
+                  aria-label={`Move a task to ${col.title}`}
+                  className={`w-[85vw] sm:w-[320px] md:w-auto shrink-0 snap-center rounded-2xl border ${col.color} p-3.5 flex flex-col min-h-[480px] shadow-xs transition-shadow ${
+                    dropTargetStatus === col.id ? "ring-2 ring-[#74D96F] ring-offset-2 shadow-md" : ""
+                  }`}
                 >
                   {/* Column Header */}
                   <div className="flex items-center justify-between pb-3 mb-3 border-b border-[#EDEDED]">
@@ -456,12 +525,22 @@ export default function ProjectsKanbanPage() {
                     {colTasks.map((task) => {
                       const isPending = pendingTaskIds.has(task.id);
                       const due = formatDate(task.dueDate);
+                      const isHighlighted = highlightedTaskId === task.id;
                       return (
                         <div
                           key={task.id}
+                          id={`task-card-${task.id}`}
                           aria-busy={isPending}
-                          className={`rounded-2xl border border-[#EDEDED] bg-white p-3.5 shadow-xs hover:border-[#74D96F] hover:shadow-md transition space-y-2.5 group ${
-                            isPending ? "opacity-70" : ""
+                          draggable={!isPending}
+                          onDragStart={(event) => handleTaskDragStart(event, task)}
+                          onDragEnd={finishTaskDrag}
+                          title={isPending ? "Status update in progress" : "Drag to move this task to another lane"}
+                          className={`rounded-2xl border bg-white p-3.5 shadow-xs hover:border-[#74D96F] hover:shadow-md transition space-y-2.5 group ${
+                            isHighlighted
+                              ? "border-[#74D96F] ring-2 ring-[#74D96F]/60 bg-[#74D96F]/5 shadow-sm"
+                              : "border-[#EDEDED]"
+                          } ${isPending ? "opacity-70" : "cursor-grab active:cursor-grabbing"} ${
+                            draggedTaskId === task.id ? "opacity-45 scale-[0.98]" : ""
                           }`}
                         >
                           {/* Priority & Project Badge */}

@@ -75,16 +75,19 @@ const querySchema = z.object({
 export const READ_TOOLS = [
   "search_second_brain",
   "get_knowledge_page",
+  "get_file_content",
   "get_project_details",
+  "list_projects",
+  "list_tasks",
   "get_meeting_minutes",
   "search_employee_directory",
 ];
-const WRITE_TOOLS = ["create_task", "update_task_status", "create_ticket"];
-const ADMIN_TOOLS = ["dispatch_browser_job", "call_backend_tool"];
+export const WRITE_TOOLS = ["create_task", "update_task_status", "create_ticket"];
+export const ADMIN_TOOLS = ["call_backend_tool"];
 // Read-only (B1) public-web access: members and above.
-const WEB_TOOLS = ["web_search", "fetch_web_page"];
+export const WEB_TOOLS = ["web_search", "fetch_web_page"];
 
-function toolsForRole(role: Role | null): string[] {
+export function toolsForRole(role: Role | null): string[] {
   switch (role) {
     case "owner":
     case "admin":
@@ -92,7 +95,7 @@ function toolsForRole(role: Role | null): string[] {
     case "member":
       return [...READ_TOOLS, ...WRITE_TOOLS, ...WEB_TOOLS];
     case "guest":
-      return ["search_second_brain", "get_knowledge_page"];
+      return ["search_second_brain", "get_knowledge_page", "list_projects", "list_tasks"];
     default:
       return [];
   }
