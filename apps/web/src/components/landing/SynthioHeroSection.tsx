@@ -98,9 +98,9 @@ export function SynthioHeroSection() {
   });
 
   return (
-    <div className="w-full bg-[#E8EAEF] min-h-[92vh] sm:min-h-screen py-3 sm:py-5 md:py-8 px-2 sm:px-4 md:px-8 flex items-center justify-center font-sans">
-      {/* Full Width Framed Canvas */}
-      <div className="w-full bg-white rounded-[24px] sm:rounded-[36px] md:rounded-[44px] shadow-[0_25px_80px_-15px_rgba(20,25,38,0.12),0_0_1px_rgba(0,0,0,0.08)] relative overflow-hidden flex flex-col justify-between min-h-[680px] sm:min-h-[760px] md:min-h-[820px] border border-white/80 select-none">
+    <div className="w-full bg-[#E8EAEF] min-h-[92vh] sm:min-h-screen pt-0 pb-3 sm:pb-5 md:pb-8 px-0 flex flex-col items-center justify-start font-sans">
+      {/* Full Width Canvas (no side paddings, square top, rounded bottom) */}
+      <div className="w-full bg-white rounded-t-none rounded-b-[24px] sm:rounded-b-[36px] md:rounded-b-[44px] shadow-[0_25px_80px_-15px_rgba(20,25,38,0.10)] relative overflow-hidden flex flex-col justify-between min-h-[680px] sm:min-h-[760px] md:min-h-[820px] border-t-0 border-x-0 border-b border-[#E2E8F0] select-none">
         {/* Subtle Pinstripe Vertical Columns in background across full width */}
         <div className="absolute inset-0 pointer-events-none grid grid-cols-8 md:grid-cols-16">
           {Array.from({ length: 16 }).map((_, i) => (
