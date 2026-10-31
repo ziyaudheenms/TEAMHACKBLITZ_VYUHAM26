@@ -36,6 +36,8 @@ lib/
 lib64/
 !apps/api/src/lib/
 !apps/api/src/lib/**
+!apps/web/src/lib/
+!apps/web/src/lib/**
 parts/
 sdist/
 var/
