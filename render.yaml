@@ -1,4 +1,5 @@
 services:
+  # 1. Main Backend API (Node / Bun / Hono - Port 10000)
   - type: web
     name: bizcontext-api
     runtime: docker
@@ -15,6 +16,11 @@ services:
         value: 10000
       - key: HOST
         value: 0.0.0.0
+      - key: AI_ENGINE_URL
+        fromService:
+          type: web
+          name: bizcontext-ai-engine
+          property: host
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
@@ -27,9 +33,28 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
-      - key: OPENAI_API_KEY
-        sync: false
+
+  # 2. Autonomous AI Agent Engine (Python / FastAPI / Pydantic AI Harness - Port 8000)
+  - type: web
+    name: bizcontext-ai-engine
+    runtime: docker
+    dockerfilePath: ./apps/ai-engine/Dockerfile
+    dockerContext: ./apps/ai-engine
+    plan: free
+    region: oregon
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: HOST
+        value: 0.0.0.0
       - key: GEMINI_API_KEY
         sync: false
-      - key: ANTHROPIC_API_KEY
-        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: BACKEND_API_BASE_URL
+        fromService:
+          type: web
+          name: bizcontext-api
+          property: host

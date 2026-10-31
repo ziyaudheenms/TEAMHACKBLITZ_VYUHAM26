@@ -99,6 +99,7 @@ async def root() -> Dict[str, Any]:
 if __name__ == "__main__":
     import uvicorn
 
-    port = int(os.getenv("AI_ENGINE_PORT", settings.ai_engine_port))
-    host = os.getenv("AI_ENGINE_HOST", settings.ai_engine_host)
-    uvicorn.run("app.main:app", host=host, port=port, reload=True)
+    port = int(os.getenv("PORT", os.getenv("AI_ENGINE_PORT", str(settings.ai_engine_port))))
+    host = os.getenv("HOST", os.getenv("AI_ENGINE_HOST", settings.ai_engine_host))
+    uvicorn.run("app.main:app", host=host, port=port)
+
